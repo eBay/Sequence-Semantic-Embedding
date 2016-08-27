@@ -1,0 +1,5 @@
+https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow-0.10.0rc0-cp27-none-linux_x86_64.whl
+matplotlib==1.5.1
+scikit-learn==0.17.1
+Flask==0.11.1
+jsonify==0.5
