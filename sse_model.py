@@ -178,10 +178,49 @@ class SSEModel(object):
       self._dual_encoder_network()
     elif self.network_mode == 'shared-encoder':
       self._shared_encoder_network()
+    elif self.network_mode == 'source_only_cnn':
+      self._cnn_encoder_network()
     else:
       print('Error!! Unsupported network mode: %s. Please specify on: source-encoder-only, dual-encoder or shared-encoder.' % self.network_mode )
       exit(-1)
 
+  def _cnn_encoder_network(self):
+    with tf.variable_scope('source_only_cnn'):
+        self.src_input_expanded = tf.expand_dims(self.src_input_distributed, -1)
+        pooled_outputs = []
+        filter_sizes = [2, 3, 4, 5]
+        num_filters = [256, 128, 128, 64]
+        for i, filter_size in enumerate(filter_sizes):
+            with tf.name_scope('conv-maxpool-{0}'.format(filter_size)):
+                filter_shape = [filter_size, self.word_embed_size, 1, num_filters[i]]
+                W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name='W')
+                b = tf.Variable(tf.constant(0.1, shape=[num_filters[i]]), name='b')
+                conv = tf.nn.conv2d(
+                  self.src_input_expanded,
+                  W,
+                  strides=[1, 1, 1, 1],
+                  padding='VALID',
+                  name='conv')
+                h = tf.nn.relu(tf.nn.bias_add(conv, b), name='relu')
+                pool = tf.nn.max_pool(
+                    h,
+                    ksize=[1, self.MAX_SEQ_LENGTH - filter_size + 1, 1, 1],
+                    strides=[1, 1, 1, 1],
+                    padding='VALID',
+                    name='pool')
+                pooled_outputs.append(pool)
+
+        feature_size = sum(num_filters)
+        self.pool = tf.concat(3, pooled_outputs)
+        self.pool_flat = tf.reshape(self.pool, [-1, feature_size])
+
+        self.src_M = tf.get_variable('src_M', shape=[feature_size, self.seq_embed_size],
+                                     initializer=tf.truncated_normal_initializer())
+        self.src_seq_embedding = tf.matmul(self.pool_flat, self.src_M)
+
+    with tf.variable_scope('target_embedding'):
+      self.tgt_seq_embedding = tf.get_variable('tgt_seq_embedding', shape=[self.targetSpaceSize, self.seq_embed_size],
+                                               initializer=tf.random_uniform_initializer(-0.25, 0.25))
 
 
   def _source_encoder_only_network(self):
