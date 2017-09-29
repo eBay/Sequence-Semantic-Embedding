@@ -346,7 +346,7 @@ class SSEModel(object):
       #         tf.expand_dims( self._labels, 1 ), self.neg_sample_size, self.targetSpaceSize) )
 
       #doing full target space softmax loss at here
-      self.loss = tf.reduce_mean( tf.nn.sparse_softmax_cross_entropy_with_logits( self.similarity, self._labels) )
+      self.loss = tf.reduce_mean( tf.nn.sparse_softmax_cross_entropy_with_logits( logits= self.similarity, labels= self._labels) )
 
       #TODO: try sigmoid loss function later: tf.nn.sigmoid_cross_entropy_with_logits(logits, targets, name=None)
 
@@ -415,8 +415,8 @@ class SSEModel(object):
      * loss (moving average)
 
     """
-    loss = tf.scalar_summary("loss (raw)", self.loss)
-    return tf.merge_summary([loss])
+    loss = tf.summary.scalar("loss (raw)", self.loss)
+    return tf.summary.merge([loss])
 
 
   def get_train_batch(self, train_set, batch_size, tgtID_FullLabelMap):

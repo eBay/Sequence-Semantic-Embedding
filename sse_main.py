@@ -264,7 +264,7 @@ def train():
     evaluator = sse_evaluator.Evaluator(model, eval_src_seqs, eval_src_lens, eval_tgtIDs, target_inputs, target_lens, tgtID_FullLableMap, sess)
 
     #setup tensorboard logging
-    sw = tf.train.SummaryWriter(FLAGS.model_dir, sess.graph, flush_secs=120)
+    sw =  tf.summary.FileWriter( logdir=FLAGS.model_dir,  graph=sess.graph, flush_secs=120)
     summary_op = model.add_summaries()
 
     # This is the training loop.
