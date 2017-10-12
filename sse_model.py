@@ -70,7 +70,11 @@ target sequence are similar and can be shared.
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
+from builtins import zip
+from builtins import range
+from builtins import object
 import random
 
 import numpy as np
@@ -377,7 +381,7 @@ class SSEModel(object):
 
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), self.max_gradient_norm )
-    self.train = optimizer.apply_gradients( zip(grads, tvars), global_step=self.global_step)  #tutorial version??
+    self.train = optimizer.apply_gradients( list(zip(grads, tvars)), global_step=self.global_step)  #tutorial version??
 
     # #TODO: try different optimizer to see if any improvements
     # self.train = optimizer.minimize(self.loss, global_step=self.global_step, gate_gradients=optimizer.GATE_NONE) #default version?
@@ -437,7 +441,7 @@ class SSEModel(object):
     # and then generate labels ( classes labeled from [0, num_target_space)
 
     source_inputs, labels, src_lens = [], [], []
-    for idx in xrange(batch_size):
+    for idx in range(batch_size):
       #add a postive pair to batch
       source_input,  src_len,  tgtID = random.choice(train_set)
       source_inputs.append( source_input )

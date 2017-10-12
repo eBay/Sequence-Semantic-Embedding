@@ -36,7 +36,10 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
+# from builtins import str
+from builtins import str
 import gzip
 import os
 import re
@@ -49,10 +52,10 @@ from six.moves import urllib
 from tensorflow.python.platform import gfile
 
 # Special vocabulary symbols - we always put them at the start.
-_PAD = b"_PAD"
-_BOS = b"_BOS"
-_EOS = b"_EOS"
-_UNK = b"_UNK"
+_PAD = "_PAD"
+_BOS = "_BOS"
+_EOS = "_EOS"
+_UNK = "_UNK"
 _START_VOCAB = [_PAD, _BOS, _EOS, _UNK]
 
 PAD_ID = 0
@@ -71,8 +74,8 @@ def text_normalize(rawstr):
   tnstring = re.sub("\\s+", " ", tnstring).strip()
   return tnstring
 
-_WORD_SPLIT = re.compile(b"([.,!?\"';-@#)(])")
-_DIGIT_RE = re.compile(br"\d")
+_WORD_SPLIT = re.compile("([.,!?\"';-@#)(])")
+_DIGIT_RE = re.compile(r"\d")
 
 
 def maybe_download(directory, filename, url):
@@ -167,7 +170,7 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
   if not gfile.Exists(vocabulary_path):
     print("Creating vocabulary %s from data %s" % (vocabulary_path, data_path))
     vocab = {}
-    with gfile.GFile(data_path, mode="rb") as f:
+    with gfile.GFile(data_path, mode="r") as f:
       counter = 0
       for line in f:
         counter += 1
@@ -193,7 +196,7 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
 
       with gfile.GFile(vocabulary_path, mode="wb") as vocab_file:
         for w in vocab_list:
-          vocab_file.write(w + b"\n")
+          vocab_file.write(w + "\n")
 
 
 def initialize_vocabulary(vocabulary_path):
@@ -217,7 +220,7 @@ def initialize_vocabulary(vocabulary_path):
   """
   if gfile.Exists(vocabulary_path):
     rev_vocab = []
-    with gfile.GFile(vocabulary_path, mode="rb") as f:
+    with gfile.GFile(vocabulary_path, mode="r") as f:
       rev_vocab.extend(f.readlines())
     rev_vocab = [line.strip() for line in rev_vocab]
     vocab = dict([(x, y) for (y, x) in enumerate(rev_vocab)])

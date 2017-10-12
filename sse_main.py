@@ -26,7 +26,11 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
+# from builtins import str
+from builtins import str
+from builtins import range
 import math
 import os, logging
 import random
@@ -112,7 +116,7 @@ def read_train_data(encoded_trainpair_path, encodedTargetSpaceMap):
       continue
     source_tokens = source_tokens + [data_utils.PAD_ID] * (FLAGS.max_seq_length - src_len)
     #get targetID input
-    if tgtID not in encodedTargetSpaceMap.keys():
+    if tgtID not in set(encodedTargetSpaceMap.keys()):
       print('Error Detected!! trouble in finding targetID in target Space file!! %s' % tgtID )
       continue
     data_set.append([source_tokens, src_len, tgtID])
@@ -277,7 +281,7 @@ def train():
       for batchId in range(epoc_steps - int( 2.5 * FLAGS.steps_per_checkpoint) ): #basic drop out here
         start_time = time.time()
         source_inputs, labels, src_lens = [], [], []
-        for idx in xrange(FLAGS.batch_size):
+        for idx in range(FLAGS.batch_size):
           source_input, src_len, tgtID = train_set[batchId * FLAGS.batch_size + idx]
           source_inputs.append(source_input)
           labels.append(tgtID_FullLableMap[tgtID])

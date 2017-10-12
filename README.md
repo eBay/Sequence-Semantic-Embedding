@@ -93,12 +93,14 @@ $> python -m flask run --port 5000 --host=0.0.0.0
 ``` bash
 $> curl -i -H "Accept: application/json" -H "Content-Type: application/json" -X GET http://hostname:5000/api/catreco?title=men's running shoes
 
-or you can just open a web browser and put a GET request like: http://hostname:5000/api/catreco?title=men's running shoes&nbest=15 
-
-The webserver will return json object with a list of top 15 most relevant eBay leaf category with ID, names and matching scores.
+```
+or you can just open a web browser and put a GET request like:
 
 ```
+http://hostname:5000/api/catreco?title=men's running shoes&nbest=15
+```
 
+The webserver will return json object with a list of top 15 most relevant eBay leaf category with ID, names and matching scores.
 
 
 ## References

@@ -32,7 +32,11 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from __future__ import unicode_literals
 
+from builtins import map
+from builtins import range
+from builtins import object
 import random
 
 import numpy as np
@@ -79,7 +83,7 @@ class Evaluator(object):
 
     tgtLen_batches = [ target_lens for k in range(0, len(srcSeqs), batch_size)]
 
-    self.feed_dicts = map(model.get_predict_feed_dict, srcSeq_batches, tgtInput_batches, srcLens_batches, tgtLen_batches)
+    self.feed_dicts = list(map(model.get_predict_feed_dict, srcSeq_batches, tgtInput_batches, srcLens_batches, tgtLen_batches))
 
     self.session = session
 
