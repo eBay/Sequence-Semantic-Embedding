@@ -371,7 +371,7 @@ def demo():
     _, rev_tgt_vocab = data_utils.initialize_vocabulary(tgt_vocab_path)
 
     # Decode from standard input.
-    sys.stdout.write("> ")
+    sys.stdout.write("\n\nPlease type some keywords to get classification results.\nType 'exit' to quit demo.\n > ")
     sys.stdout.flush()
     sentence = sys.stdin.readline()
     while sentence and sentence.strip().lower() != 'exit':
