@@ -179,7 +179,7 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
           print("  processing line %d" % counter)
         tokens = tokenizer(line) if tokenizer else basic_tokenizer(line)
         for w in tokens:
-          word = re.sub(_DIGIT_RE, b"0", w) if normalize_digits else w
+          word = re.sub(_DIGIT_RE, "0", w) if normalize_digits else w
           if word in vocab:
             vocab[word] += 1
           else:
@@ -255,7 +255,7 @@ def sentence_to_token_ids(sentence, vocabulary,
   if not normalize_digits:
     return [vocabulary.get(w, UNK_ID) for w in words]
   # Normalize digits by 0 before looking words up in the vocabulary.
-  return [vocabulary.get(re.sub(_DIGIT_RE, b"0", w), UNK_ID) for w in words]
+  return [vocabulary.get(re.sub(_DIGIT_RE, "0", w), UNK_ID) for w in words]
 
 
 def encode_data_to_token_ids(raw_data_path, encoded_path, vocabulary_path, targetSet,

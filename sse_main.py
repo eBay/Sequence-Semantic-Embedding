@@ -64,7 +64,7 @@ tf.app.flags.DEFINE_integer("src_vocab_size", 50000, "Source Sequence vocabulary
 tf.app.flags.DEFINE_integer("tgt_vocab_size", 3000, "Target Sequence vocabulary size in the mapping task.")
 
 tf.app.flags.DEFINE_integer("max_seq_length", 55, "max number of words in each source or target sequence.")
-tf.app.flags.DEFINE_integer("max_epoc", 8, "max epoc number for training procedure.")
+tf.app.flags.DEFINE_integer("max_epoc", 5, "max epoc number for training procedure.")
 tf.app.flags.DEFINE_integer("predict_nbest", 20, "max top N for evaluation prediction.")
 
 
@@ -158,16 +158,16 @@ def create_model(session, targetSpaceSize, forward_only):
       network_mode=FLAGS.network_mode , forward_only=forward_only, TOP_N=FLAGS.predict_nbest )
 
   ckpt = tf.train.get_checkpoint_state(FLAGS.model_dir)
-  if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
+  if ckpt:
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
     model.saver.restore(session, ckpt.model_checkpoint_path)
   else:
     if forward_only:
-      print('Error!!!Could not load model from specified folder: %s' % FLAGS.model_dir )
+      print('Error!!!Could not load any model from specified folder: %s' % FLAGS.model_dir )
       exit(-1)
     else:
       print("Created model with fresh parameters.")
-      session.run(tf.initialize_all_variables())
+      session.run(tf.global_variables_initializer())
   return model
 
 
@@ -259,6 +259,7 @@ def train():
   eval_src_seqs, eval_src_lens, eval_tgtIDs = get_eval_set( encoded_eval_pair_path )
 
   cfg = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)
+
   with tf.device('/' + FLAGS.device),  tf.Session(config=cfg) as sess:
     # Create SSE model and build tensorflow training graph.
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.embedding_size))
@@ -301,7 +302,7 @@ def train():
                              step_time, step_loss ))
           # Save checkpoint and zero timer and loss.
           checkpoint_path = os.path.join(FLAGS.model_dir, "SSE-LSTM.ckpt")
-          model.save(sess, checkpoint_path, global_step=model.global_step)
+          # model.save(sess, checkpoint_path, global_step=model.global_step)  #only save better models
           step_time, loss = 0.0, 0.0
           # Run evals on development set and print their accuracy number.
           t = time.time()
@@ -320,7 +321,11 @@ def train():
           previous_accuracies.append(acc1)
           # save currently best-ever model
           if acc1 == max(previous_accuracies):
+            print("Better Accuracy %f found. Saving current best model ..." % acc1 )
             model.save(sess, checkpoint_path + "-BestEver")
+          else:
+            print("Best Accuracy is: %f, while current round is: %f" % (max(previous_accuracies), acc1) )
+            print("skip saving model ...")
           # if finished at least 2 Epocs and still no further accuracy improvement, stop training
           # report the best accuracy number and final model's number and save it.
           if epoch > 2 and acc1 < min(previous_accuracies[-3:]):
@@ -369,9 +374,9 @@ def demo():
     sys.stdout.write("> ")
     sys.stdout.flush()
     sentence = sys.stdin.readline()
-    while sentence:
+    while sentence and sentence.strip().lower() != 'exit':
       # Get token-ids for the input sentence.
-      source_tokens = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), src_vocab, normalize_digits=True)
+      source_tokens = data_utils.sentence_to_token_ids( tf.compat.as_str(sentence), src_vocab, normalize_digits=True)
       src_len = len(source_tokens)
       if src_len > FLAGS.max_seq_length:
         print(

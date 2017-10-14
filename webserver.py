@@ -133,7 +133,7 @@ class FlaskApp(Flask):
                                   network_mode=FLAGS.network_mode, forward_only=True,
                                   TOP_N=FLAGS.predict_nbest)  # Load vocabularies.
     ckpt = tf.train.get_checkpoint_state(FLAGS.model_dir)
-    if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
+    if ckpt:
       print("Loading model parameters from %s" % ckpt.model_checkpoint_path)
       self.model.saver.restore(self.sess, ckpt.model_checkpoint_path)
     else:
@@ -160,7 +160,7 @@ def catreco():
 
     # inference tensorflow model
     # Get token-ids for the input sentence.
-    source_tokens = data_utils.sentence_to_token_ids(tf.compat.as_bytes(title), app.src_vocab,
+    source_tokens = data_utils.sentence_to_token_ids(tf.compat.as_str(title), app.src_vocab,
                                                      normalize_digits=True)
     src_len = len(source_tokens)
     if src_len > FLAGS.max_seq_length:
