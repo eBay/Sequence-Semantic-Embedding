@@ -1,3 +1,4 @@
+# coding=utf-8
 ################################################################################
 #
 # Copyright (c) 2016 eBay Software Foundation.
@@ -46,36 +47,16 @@ import re
 import tarfile
 import codecs
 import random
+import numpy as np
+import sys
+import text_encoder
+import tokenizer
+
 
 from six.moves import urllib
 
 from tensorflow.python.platform import gfile
 
-# Special vocabulary symbols - we always put them at the start.
-_PAD = "_PAD"
-_BOS = "_BOS"
-_EOS = "_EOS"
-_UNK = "_UNK"
-_START_VOCAB = [_PAD, _BOS, _EOS, _UNK]
-
-PAD_ID = 0
-BOS_ID = 1
-EOS_ID = 2
-UNK_ID = 3
-
-
-# Regular expressions used to tokenize.
-def repl(m):
-  return m.group(1) + " " + m.group(2) + " " + m.group(3)
-
-def text_normalize(rawstr):
-  tnstring = rawstr.lower()
-  tnstring = re.sub("[^a-z0-9':#,$-]", " ", tnstring)
-  tnstring = re.sub("\\s+", " ", tnstring).strip()
-  return tnstring
-
-_WORD_SPLIT = re.compile("([.,!?\"';-@#)(])")
-_DIGIT_RE = re.compile(r"\d")
 
 
 def maybe_download(directory, filename, url):
@@ -113,203 +94,167 @@ def get_data_set(rawDir, processedDir):
     #extract out the TrainPairs file
     with tarfile.open(corpus_file, "r") as corpus_tar:
       corpus_tar.extractall(processedDir)
-    #produce the train dataset file
-    with codecs.open( train_path + '.source', 'w', 'utf-8' ) as srcFile, \
-         codecs.open(train_path + '.target', 'w', 'utf-8') as tgtFile:
+    #produce the train corpus file
+    with codecs.open( train_path + '.source.Corpus', 'w', 'utf-8' ) as srcFile, \
+         codecs.open(train_path + '.target.Corpus', 'w', 'utf-8') as tgtFile:
       for line in codecs.open( os.path.join(processedDir, 'TrainPairs'), 'r', 'utf-8'):
-        if len(line.strip().split('\t')) != 3:
+        info = line.lower().strip().split('\t') # srcSeq, tgtSeq, tgtId = line.strip().split('\t')
+        if len(info) < 2:
           print('Error train pair data:%s' % line)
           continue
-        srcSeq, tgtSeq, tgtId = line.strip().split('\t')
-        srcSeq = text_normalize(srcSeq)
-        srcFile.write(srcSeq + '\n')
-        tgtFile.write(tgtId + '\n')
-    #produce the eval dataset file
-    with codecs.open(dev_path + '.source', 'w', 'utf-8') as srcFile, \
-         codecs.open(dev_path + '.target', 'w', 'utf-8') as tgtFile:
+        srcFile.write(info[0] + '\n')
+        tgtFile.write(info[1] + '\n')
+    #produce the eval corpus file
+    with codecs.open(dev_path + '.source.Corpus', 'w', 'utf-8') as srcFile, \
+         codecs.open(dev_path + '.target.Corpus', 'w', 'utf-8') as tgtFile:
       for line in codecs.open(os.path.join(processedDir, 'EvalPairs'), 'r', 'utf-8'):
-        if len(line.strip().split('\t')) != 3:
-          print('Error dev pair data:%s' % line)
+        info = line.lower().strip().split('\t') # srcSeq, tgtSeq, tgtId = line.strip().split('\t')
+        if len(info) < 2:
+          print('Error train pair data:%s' % line)
           continue
-        srcSeq, tgtSeq, tgtId = line.strip().split('\t')
-        srcSeq = text_normalize(srcSeq)
-        srcFile.write(srcSeq + '\n')
-        tgtFile.write(tgtId + '\n')
+        srcFile.write(info[0] + '\n')
+        tgtFile.write(info[1] + '\n')
 
   return train_path, dev_path
 
 
-def basic_tokenizer(sentence):
-  """Very basic tokenizer: split the sentence into a list of tokens."""
-  words = []
-  sentence_normed = text_normalize(sentence)
-  #sentence_normed = sentence.lower()
-  for space_separated_fragment in sentence_normed.split():
-    words.extend(re.split(_WORD_SPLIT, space_separated_fragment))
-  return [w for w in words if w]
 
-
-def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
-                      tokenizer=None, normalize_digits=True):
-  """Create vocabulary file (if it does not exist yet) from data file.
-
-  Data file is assumed to contain one sentence per line. Each sentence is
-  tokenized and digits are normalized (if normalize_digits is set).
-  Vocabulary contains the most-frequent tokens up to max_vocabulary_size.
-  We write it to vocabulary_path in a one-token-per-line format, so that later
-  token in the first line gets id=0, second line gets id=1, and so on.
-
-  Args:
-    vocabulary_path: path where the vocabulary will be created.
-    data_path: data file that will be used to create vocabulary.
-    max_vocabulary_size: limit on the size of the created vocabulary.
-    tokenizer: a function to use to tokenize each data sentence;
-      if None, basic_tokenizer will be used.
-    normalize_digits: Boolean; if true, all digits are replaced by 0s.
-  """
-  if not gfile.Exists(vocabulary_path):
-    print("Creating vocabulary %s from data %s" % (vocabulary_path, data_path))
-    vocab = {}
-    with gfile.GFile(data_path, mode="r") as f:
-      counter = 0
-      for line in f:
-        counter += 1
-        line = line.strip().split('\t')[0]
-        if counter % 100000 == 0:
-          print("  processing line %d" % counter)
-        tokens = tokenizer(line) if tokenizer else basic_tokenizer(line)
-        for w in tokens:
-          word = re.sub(_DIGIT_RE, "0", w) if normalize_digits else w
-          if word in vocab:
-            vocab[word] += 1
-          else:
-            vocab[word] = 1
-      sorted_vocab = sorted(vocab, key=vocab.get, reverse=True)
-      vocab_list = _START_VOCAB + sorted_vocab
-      if len(vocab_list) > max_vocabulary_size:
-        vocab_list = vocab_list[:max_vocabulary_size]
-        print("Corpus %s has %d tokens, %d uniq words, %d vocab at cutoff %d." % (
-        data_path, sum(vocab.values()), len(vocab),  max_vocabulary_size, vocab[sorted_vocab[max_vocabulary_size - len(_START_VOCAB)]] ) )
-      else:
-        print("Corpus %s has %d tokens, %d uniq words, %d vocab at cutoff %d." % (
-        data_path, sum(vocab.values()), len(vocab), len(vocab), 0))
-
-      with gfile.GFile(vocabulary_path, mode="wb") as vocab_file:
-        for w in vocab_list:
-          vocab_file.write(w + "\n")
-
-
-def initialize_vocabulary(vocabulary_path):
-  """Initialize vocabulary from file.
-
-  We assume the vocabulary is stored one-item-per-line, so a file:
-    dog
-    cat
-  will result in a vocabulary {"shoes": 0, "shirt": 1}, and this function will
-  also return the reversed-vocabulary ["shoes", "shirt"].
-
-  Args:
-    vocabulary_path: path to the file containing the vocabulary.
-
-  Returns:
-    a pair: the vocabulary (a dictionary mapping string to integers), and
-    the reversed vocabulary (a list, which reverses the vocabulary mapping).
-
-  Raises:
-    ValueError: if the provided vocabulary_path does not exist.
-  """
-  if gfile.Exists(vocabulary_path):
-    rev_vocab = []
-    with gfile.GFile(vocabulary_path, mode="r") as f:
-      rev_vocab.extend(f.readlines())
-    rev_vocab = [line.strip() for line in rev_vocab]
-    vocab = dict([(x, y) for (y, x) in enumerate(rev_vocab)])
-    return vocab, rev_vocab
-  else:
-    raise ValueError("Vocabulary file %s not found.", vocabulary_path)
-
-
-def sentence_to_token_ids(sentence, vocabulary,
-                          tokenizer=None, normalize_digits=True):
-  """Convert a string to list of integers representing token-ids.
-
-  For example, a sentence "I have a dog" may become tokenized into
-  ["I", "want", "buy", "shoes"] and with vocabulary {"I": 1, "want": 2,
-  "buy": 4, "shoes": 7"} this function will return [1, 2, 4, 7].
-
-  Args:
-    sentence: the sentence in bytes format to convert to token-ids.
-    vocabulary: a dictionary mapping tokens to integers.
-    tokenizer: a function to use to tokenize each sentence;
-      if None, basic_tokenizer will be used.
-    normalize_digits: Boolean; if true, all digits are replaced by 0s.
-
-  Returns:
-    a list of integers, the token-ids for the sentence.
+def gen_classification_corpus( pairfilename, encodedTargetSpace, encoder, max_seq_length ):
   """
 
-  if tokenizer:
-    words = tokenizer(sentence)
-  else:
-    words = basic_tokenizer(sentence)
-  if not normalize_digits:
-    return [vocabulary.get(w, UNK_ID) for w in words]
-  # Normalize digits by 0 before looking words up in the vocabulary.
-  return [vocabulary.get(re.sub(_DIGIT_RE, "0", w), UNK_ID) for w in words]
-
-
-def encode_data_to_token_ids(raw_data_path, encoded_path, vocabulary_path, targetSet,
-                      tokenizer=None, normalize_digits=True):
-  """encode raw train/eval pair data file  into token-ids using given vocabulary file.
-     also check if labeled targetID is valid contained in targetSet
-
-  This function loads data line-by-line from data_path, calls the above
-  sentence_to_token_ids, and saves the result to encoded_path. See comment
-  for sentence_to_token_ids on the details of token-ids format.
-
-  Args:
-    raw_data_path: path to the train/eval pair data file in src, tgt, targetID format.
-    target_path: path where the file with targetID, token-ids will be created.
-    vocabulary_path: path to the vocabulary file.
-    targetSet: valid targetID collection.
-    tokenizer: a function to use to tokenize each sentence;
-      if None, basic_tokenizer will be used.
-    normalize_digits: Boolean; if true, all digits are replaced by 0s.
+  :param pairfilename:
+  :param encoder:
+  :param max_seq_length:
+  :return:
   """
-  if not gfile.Exists(encoded_path):
-    print("Tokenizing data in %s" % raw_data_path)
-    vocab, _ = initialize_vocabulary(vocabulary_path)
-    with codecs.open(encoded_path, 'w', 'utf-8') as tokens_file:
-      counter = 0
-      for line in codecs.open( raw_data_path, 'r', 'utf-8'):
-        counter += 1
-        if counter % 100000 == 0:
-          print("  tokenizing line %d" % counter)
-        if len(line.strip().split('\t')) != 3:
-          print('Error data:%s' % line)
-          continue
-        src, tgt, tgtID = line.strip().split('\t')
-        if tgtID not in targetSet:
-          print('Error!!! %s with %s not found in full targetID file!!' % (tgt, tgtID))
-          continue
-        else:
-          src = text_normalize(src)
-          token_ids = sentence_to_token_ids(src, vocab, normalize_digits)
-          token_ids = [BOS_ID] + token_ids + [EOS_ID]
-          tokens_file.write(tgtID + '\t' + " ".join([str(tok) for tok in token_ids]) + "\n")
+  Corpus = []
+  counter = 0
+  for line in codecs.open( pairfilename , "r", 'utf-8'):
+    info = line.strip().split('\t')
+    if len(info) != 3:
+      print("File %s has Bad line of training data:\n %s" % ( pairfilename, line ) )
+      continue
+    srcSeq, tgtSeq, tgtId = info
+    counter += 1
+    if counter % 100000 == 0:
+      print("  reading data line %d" % counter)
+      sys.stdout.flush()
+    # verify target sequence correctness
+    if tgtId not in set(encodedTargetSpace.keys()):
+      print('Error Detected!! trouble in finding targetID in target Space file!! %s' % line)
+      continue
+    source_tokens = encoder.encode(srcSeq.lower())
+    seqlen = len(source_tokens)
+    if seqlen > max_seq_length - 1:
+      print(
+        'Error Deteced!!! \n Source Seq:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
+        srcSeq, seqlen, max_seq_length))
+      continue
+    source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_length - seqlen - 1)
+    Corpus.append( (source_tokens, tgtId ) )
+  return Corpus
 
 
-def prepare_raw_data(raw_data_dir, processed_data_dir , src_vocabulary_size, tgt_vocabulary_size, tokenizer=None):
-  """Get SSE training-Evaluation data into data_dir, create vocabularies and tokenize data.
+def get_classification_corpus(processed_data_dir, encoder, max_seq_length):
+  """
+
+  :param processed_data_dir: contains TrainPairs, EvalPairs and targetIDs files
+  :param encoder:
+  :param max_seq_length:
+  :return:
+  """
+  #create Encoded TargetSpace Data
+  print("Generating classification training corpus .... ")
+  encodedFullTargetSpace = {}
+  tgtIdNameMap = {}
+  encodedFullTargetFile = codecs.open( os.path.join(processed_data_dir, "encoded.FullTargetSpace"), 'w', 'utf-8')
+  for line in codecs.open( os.path.join(processed_data_dir, "targetIDs"), 'r', 'utf-8'):
+    tgtSeq, id = line.strip().split('\t')
+    token_ids = encoder.encode(tgtSeq.lower())
+    seqlen = len(token_ids)
+    if seqlen > max_seq_length-1:
+      print( 'Error Deteced!!! \n Target:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (tgtSeq, seqlen, max_seq_length ))
+      continue
+    token_ids =  token_ids + [ text_encoder.EOS_ID ] + [ text_encoder.PAD_ID] * (max_seq_length - seqlen -1)
+    encodedFullTargetSpace[id] = token_ids
+    tgtIdNameMap[id] = tgtSeq
+    decoded_tgt = encoder.decode(token_ids)
+    subtoken_strings = [encoder._all_subtoken_strings[i] for i in token_ids]
+    #debugging
+    # encodedFullTargetFile.write(id + '\t' + tgtSeq.strip() + '\t' + ','.join([str(i) for i in token_ids]) + '\t' + ','.join(subtoken_strings)  + '\t' + decoded_tgt + '\n'  )
+    encodedFullTargetFile.write(id + '\t' + tgtSeq.strip() + '\t' + ','.join([str(i) for i in token_ids]) + '\n'  )
+
+  encodedFullTargetFile.close()
+
+  #create Encoded Training Corpus: (srcTokens, srcLen, tgtTokens, tgtLen, RelevanceLabel)
+  trainingCorpus = gen_classification_corpus( os.path.join(processed_data_dir, "TrainPairs" ), encodedFullTargetSpace, encoder, max_seq_length)
+  #creat evaluation corpus: (srcTokens, srcLen, tgtLabels)
+  evalCorpus = []
+  for line in codecs.open( os.path.join(processed_data_dir, "EvalPairs" ), "r", 'utf-8'):
+    info = line.strip().split('\t')
+    if len(info) != 3:
+      print("EvalFile has Bad line of training data:\n %s" % ( line ) )
+      continue
+    srcSeq, tgtSeq, tgtId = info
+    # verify target sequence correctness
+    if tgtId not in set(encodedFullTargetSpace.keys()):
+      print('Error Detected!! trouble in finding evalPairs targetID in target Space file!! %s' % line)
+      continue
+    source_tokens = encoder.encode(srcSeq.lower())
+    seqlen = len(source_tokens)
+    if seqlen > max_seq_length - 1:
+      print(
+        'Error Deteced!!! \n Source Seq:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
+        srcSeq, seqlen, max_seq_length))
+      continue
+    source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_length - seqlen - 1)
+    # get positive sample
+    evalCorpus.append((source_tokens, source_tokens.index(text_encoder.PAD_ID) +1, tgtId ) )
+
+  #debugging purpose
+  print("evalCorpus[1] is:\n source_tokens: %s \n source_length: %s \n tgtId: %s" % ( str(evalCorpus[1][0]), str(evalCorpus[1][1]), str(evalCorpus[1][2])  ) )
+
+  return trainingCorpus, evalCorpus, encodedFullTargetSpace, tgtIdNameMap
+
+
+def get_search_corpus(processed_data_dir, encoder, max_seq_length):
+  """
+
+  :param processed_data_dir:
+  :param encoder:
+  :param negative_samples:
+  :param max_seq_length:
+  :return:
+  """
+
+
+def get_questionAnswer_corpus(processed_data_dir, encoder, max_seq_length):
+  """
+
+  :param processed_data_dir: contains TrainPairs, EvalPairs and targetIDs files
+  :param encoder:
+  :param max_seq_length:
+  :return:
+  """
+  # note QnA task's data format is the same as Classification task. So we can reuse it.
+
+  return get_classification_corpus(processed_data_dir, encoder, max_seq_length)
+
+
+
+def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, task_type,  max_seq_length):
+  """Get SSE training-Evaluation data into data_dir, create vocabularies and tokenized data.
 
   Args:
     raw_data_dir:  directory contains the raw zipped dataset.
     processed_data_dir: directory in which the processed data sets will be stored.
-    src_vocabulary_size: size of the source sequence vocabulary to create and use.
-    tgt_vocabulary_size: size of the target sequence vocabulary to create and use.
-    tokenizer: a function to use to tokenize each data sentence;
-      if None, basic_tokenizer will be used.
-
+    vocabulary_size: size of the vocabulary to create and use if no vocabulary file found in rawdata. Otherwise, use supplied vocabulary file.
+    task_type: different task_type has slightly different rawdata format, and need different treatment
+               for classification task, usually has TrainPairs, EvalPairs, targetSpaceID file
+               for search task,
+               for cross-lingual search tasks,
+               for question answer tasks,
+    max_seq_length: max number of tokens  of a single source/target sequence
   Returns:
     A tuple of 5 elements:
       (1) path to encoded TrainPairs: targetID, Sequence of source token IDs
@@ -321,36 +266,102 @@ def prepare_raw_data(raw_data_dir, processed_data_dir , src_vocabulary_size, tgt
   # extract corpus to the specified processed directory.
   get_data_set(raw_data_dir, processed_data_dir)
 
-  # Create vocabularies of the appropriate sizes.
-  tgt_vocab_path = os.path.join(processed_data_dir, "vocab.tgt" )
-  src_vocab_path = os.path.join(processed_data_dir, "vocab.src" )
-  create_vocabulary(tgt_vocab_path, os.path.join(processed_data_dir, "targetIDs"), tgt_vocabulary_size, tokenizer, normalize_digits=False)
-  create_vocabulary(src_vocab_path, os.path.join(processed_data_dir, "Train.source"), src_vocabulary_size, tokenizer, normalize_digits=False)
+  # generate vocab file if not available, otherwise, use supplied vocab file for encoder
+  vocabFile = processed_data_dir + '/vocabulary.txt'
+  if  gfile.Exists( vocabFile ):
+    print("Loading supplied vocabluary file: %s" % vocabFile )
+    encoder = text_encoder.SubwordTextEncoder(filename=vocabFile)
+    print("Total vocab size is: %d" % encoder.vocab_size )
+  else:
+    print("No supplied vocabulary file found. Build new vocabulary based on training data ....")
+    token_counts = tokenizer.corpus_token_counts( processed_data_dir + '/*.Corpus', 1000000, split_on_newlines=True)
+    encoder = text_encoder.SubwordTextEncoder.build_to_target_size( vocabulary_size, token_counts, 2, 1000 )
+    encoder.store_to_file(vocabFile)
+    print("New vocabulary constructed.")
 
-  #create Encoded TargetSpace file
-  encodedFullTargetSpace_path = os.path.join(processed_data_dir, "encoded.FullTargetSpace")
-  tgt_vocab, _ = initialize_vocabulary(tgt_vocab_path)
-  targetIDs = set()
-  with codecs.open( encodedFullTargetSpace_path, 'w', 'utf-8') as tokens_file:
-    for line in codecs.open( os.path.join(processed_data_dir, "targetIDs"), 'r', 'utf-8'):
-      tgtSeq, id = line.strip().split('\t')
-      token_ids = sentence_to_token_ids(tgtSeq, tgt_vocab, normalize_digits=False)
-      token_ids = [BOS_ID] + token_ids + [EOS_ID]
-      tokens_file.write( id + '\t' + " ".join([str(tok) for tok in token_ids]) + "\n")
-      targetIDs.add(id)
+  # create training corpus and evaluation corpus per task_type
+  if task_type.lower().strip() == "classification":
+    train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap = get_classification_corpus( processed_data_dir, encoder, max_seq_length)
+  elif task_type.lower().strip() in ["search", "crosslanguages" ]:
+    train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap = get_search_corpus( processed_data_dir, encoder,  max_seq_length)
+  elif task_type.lower().strip()  == "questionanswer":
+    train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap = get_questionAnswer_corpus(processed_data_dir, encoder, max_seq_length)
+  else:
+    raise ValueError("Unsupported task_type. Please use one of: classification, search, crosslanguages, questionanswer")
 
-  # Create Encoded TrainPairFile
-  encoded_train_pair_path = os.path.join(processed_data_dir, "encoded.TrainPairs")
-  raw_train_pair_path = os.path.join(processed_data_dir, 'TrainPairs')
-  encode_data_to_token_ids(raw_train_pair_path, encoded_train_pair_path, src_vocab_path, targetIDs, normalize_digits=False)
-
-  # Create Encoded EvalPairFile
-  encoded_eval_pair_path = os.path.join(processed_data_dir, "encoded.EvalPairs")
-  raw_eval_pair_path = os.path.join(processed_data_dir, 'EvalPairs')
-  encode_data_to_token_ids(raw_eval_pair_path, encoded_eval_pair_path, src_vocab_path, targetIDs, normalize_digits=False)
+  return encoder, train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap
 
 
-  return (encoded_train_pair_path, encoded_eval_pair_path,
-          encodedFullTargetSpace_path,
-          src_vocab_path, tgt_vocab_path)
+
+
+def load_encodedTargetSpace(processed_data_dir):
+  """
+
+  :param processed_data_dir:
+  :return:
+  """
+  vocabFile = processed_data_dir + '/vocabulary.txt'
+  if  gfile.Exists( vocabFile ):
+    encoder = text_encoder.SubwordTextEncoder(filename=vocabFile)
+    print("Loaded  vocab size is: %d" % encoder.vocab_size )
+  else:
+    raise  ValueError("Error!! Could not found vaculary file in model folder.")
+  encodedTgtSpace = {}
+  tgtID_Name_Map = {}
+  tgtEncodeFile = os.path.join(processed_data_dir, "encoded.FullTargetSpace")
+  if not gfile.Exists(tgtEncodeFile):
+    raise ValueError("Error! could not found encoded.FullTargetSpace in model folder.")
+  print("Loading full target space index ...")
+  for line in codecs.open( tgtEncodeFile, 'r',  'utf-8'):
+    tgtId, tgtName, tgtEncoding = line.strip().split('\t')
+    tgtID_Name_Map[tgtId] = tgtName
+    encodedTgtSpace[tgtId] = [ int(i) for i in tgtEncoding.split(',') ]
+  return encoder, encodedTgtSpace, tgtID_Name_Map
+
+
+
+def save_model_configs(processed_data_dir, configs):
+  max_seq_length, max_gradient_norm, vocabsize, embedding_size, \
+  encoding_size, src_cell_size,  tgt_cell_size, num_layers, \
+  learning_rate,  learning_rate_decay_factor, targetSpaceSize, network_mode, TOP_N = configs
+  outfile = codecs.open( os.path.join(processed_data_dir,'modelConfig.param'), 'w', 'utf-8')
+  outfile.write( 'max_seq_length=' + str(max_seq_length) + '\n')
+  outfile.write( 'max_gradient_norm=' + str(max_gradient_norm) + '\n')
+  outfile.write( 'vocabsize=' + str(vocabsize) + '\n')
+  outfile.write( 'embedding_size=' + str(embedding_size) + '\n')
+  outfile.write( 'encoding_size=' + str(encoding_size) + '\n')
+  outfile.write( 'src_cell_size=' + str(src_cell_size) + '\n')
+  outfile.write( 'tgt_cell_size=' + str(tgt_cell_size) + '\n')
+  outfile.write( 'num_layers=' + str(num_layers) + '\n')
+  outfile.write( 'learning_rate=' + str(learning_rate) + '\n')
+  outfile.write( 'learning_rate_decay_factor=' + str(learning_rate_decay_factor) + '\n')
+  outfile.write( 'targetSpaceSize=' + str(targetSpaceSize) + '\n')
+  outfile.write( 'network_mode=' + str(network_mode) + '\n')
+  outfile.write( 'TOP_N=' + str(TOP_N) + '\n')
+  outfile.close()
+  return
+
+
+def load_model_configs(processed_data_dir):
+  modelConfig={}
+  for line in open(processed_data_dir + '/modelConfig.param', 'rt'):
+    if '=' not in line.strip():
+      continue
+    key, value = line.strip().split('=')
+    modelConfig[key]=value
+  return modelConfig
+
+def getSortedResults(scores):
+  rankedIdx = np.argsort( -scores )
+  sortedScore = -np.sort( -scores, axis=1 )
+  print('Sample top5 scores:' , sortedScore[0:5])
+  return sortedScore, rankedIdx
+
+def computeTopK_accuracy( topk, labels, results ):
+  k = min(topk, results.shape[1])
+  nbrCorrect=0.0
+  for i in xrange(results.shape[0]):
+    if labels[i] in results[i][:k]:
+      nbrCorrect += 1.0
+  return nbrCorrect / float(results.shape[0])
 

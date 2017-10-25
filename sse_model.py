@@ -1,3 +1,4 @@
+# coding=utf-8
 ################################################################################
 #
 # Copyright (c) 2016 eBay Software Foundation.
@@ -88,15 +89,14 @@ class SSEModel(object):
 
   # Number of target sequences returned by prediction operation
 
-  def __init__(self, MAX_SEQ_LENGTH, max_gradient_norm, src_vocab_size, tgt_vocab_size, word_embed_size, seq_embed_size,
+  def __init__(self, MAX_SEQ_LENGTH, max_gradient_norm, vocab_size,  word_embed_size, seq_embed_size,
                src_cell_size, tgt_cell_size, num_layers,
                learning_rate, learning_rate_decay_factor, targetSpaceSize, network_mode='source-encoder-only', forward_only=False, TOP_N=20, name="SSEModel" ):
 
 
     """ Create the Sequence Semantic Embedding Model.
 
-    :param src_vocab_size: source data vocab size
-    :param tgt_vocab_size:  target data vocab size
+    :param vocab_size:  data vocab size. Note both source and target sequence share same vocabulary
     :param word_embed_size: dim for token level word embedding
     :param seq_embed_size:  dim for sequence level embedding
     :param src_cell_size:  source model RNN cell size
@@ -120,8 +120,7 @@ class SSEModel(object):
     #setup class parameters
     self.MAX_SEQ_LENGTH = MAX_SEQ_LENGTH
     self.max_gradient_norm = max_gradient_norm
-    self.src_vocab_size = src_vocab_size
-    self.tgt_vocab_size = tgt_vocab_size
+    self.vocab_size = vocab_size
     self.word_embed_size = word_embed_size
     self.seq_embed_size = seq_embed_size
     self.src_cell_size = src_cell_size
@@ -160,20 +159,18 @@ class SSEModel(object):
     #placeholder for input data
     self._src_input_data = tf.placeholder(tf.int32, [None, self.MAX_SEQ_LENGTH], name='source_sequence')
     self._tgt_input_data = tf.placeholder(tf.int32, [None, self.MAX_SEQ_LENGTH], name='target_sequence')
-    self._labels = tf.placeholder(tf.int64, [None], name='targetSpace_labels')
+    self._labels = tf.placeholder(tf.float32, [None], name='targetSpace_labels')
     self._src_lens = tf.placeholder(tf.int32, [None], name='source_seq_lenths')
     self._tgt_lens = tf.placeholder(tf.int32, [None], name='target_seq_lenths')
 
     #create word embedding vectors
-    self.src_word_embedding = tf.get_variable('src_word_embedding', [self.src_vocab_size, self.word_embed_size],
+    # note: both source and target sequence share same vocabulary and word embeddings
+    self.word_embedding = tf.get_variable('word_embedding', [self.vocab_size, self.word_embed_size],
                                          initializer=tf.random_uniform_initializer(-0.25,0.25))
 
-    self.tgt_word_embedding = tf.get_variable('tgt_word_embedding', [self.tgt_vocab_size, self.word_embed_size],
-                                         initializer=tf.random_uniform_initializer(-0.25, 0.25))
-
     #transform input tensors from tokenID to word embedding
-    self.src_input_distributed = tf.nn.embedding_lookup( self.src_word_embedding, self._src_input_data, name='dist_source')
-    self.tgt_input_distributed = tf.nn.embedding_lookup( self.tgt_word_embedding, self._tgt_input_data, name='dist_target')
+    self.src_input_distributed = tf.nn.embedding_lookup( self.word_embedding, self._src_input_data, name='dist_source')
+    self.tgt_input_distributed = tf.nn.embedding_lookup( self.word_embedding, self._tgt_input_data, name='dist_target')
 
 
     if self.network_mode == 'source-encoder-only':
@@ -262,12 +259,14 @@ class SSEModel(object):
     with tf.variable_scope('source_encoder'):
       # TODO: need play with forgetGate and peeholes here
       if self.use_lstm:
-        src_single_cell = tf.nn.rnn_cell.LSTMCell(self.src_cell_size, forget_bias=1.0, use_peepholes=False)
+        #src_single_cell = tf.nn.rnn_cell.LSTMCell(self.src_cell_size, forget_bias=1.0, use_peepholes=False)
+        src_single_cell = tf.contrib.rnn.BasicLSTMCell(self.src_cell_size)
       else:
-        src_single_cell = tf.nn.rnn_cell.GRUCell(self.src_cell_size)
+        #src_single_cell = tf.nn.rnn_cell.GRUCell(self.src_cell_size)
+        src_single_cell = tf.contrib.rnn.BasicLSTMCell(self.src_cell_size)
       src_cell = src_single_cell
       if self.num_layers > 1:
-        src_cell = tf.nn.rnn_cell.MultiRNNCell([src_single_cell] * self.num_layers)
+        src_cell = tf.contrib.rnn.MultiRNNCell([src_single_cell] * self.num_layers)
 
       src_output, _ = tf.nn.dynamic_rnn(src_cell, self.src_input_distributed, sequence_length=self._src_lens,
                                         dtype=tf.float32)
@@ -281,12 +280,12 @@ class SSEModel(object):
     with tf.variable_scope('target_encoder'):
       # need train target model
       # TODO: need play with forgetGate and peeholes here
-      tgt_single_cell = tf.nn.rnn_cell.GRUCell(self.tgt_cell_size)
+      tgt_single_cell = tf.contrib.rnn.GRUCell(self.tgt_cell_size)
       if self.use_lstm:
-        tgt_single_cell = tf.nn.rnn_cell.LSTMCell(self.tgt_cell_size, forget_bias=1.0, use_peepholes=False)
+        tgt_single_cell = tf.contrib.rnn.LSTMCell(self.tgt_cell_size)
       tgt_cell = tgt_single_cell
       if self.num_layers > 1:
-        tgt_cell = tf.nn.rnn_cell.MultiRNNCell([tgt_single_cell] * self.num_layers)
+        tgt_cell = tf.contrib.rnn.MultiRNNCell([tgt_single_cell] * self.num_layers)
 
       tgt_output, _ = tf.nn.dynamic_rnn(tgt_cell, self.tgt_input_distributed, sequence_length=self._tgt_lens,
                                         dtype=tf.float32)
@@ -339,9 +338,23 @@ class SSEModel(object):
   def _def_loss(self):
     # compute src / tgt similarity
     with tf.variable_scope('similarity'):
+      self.norm_src_seq_embedding = tf.nn.l2_normalize(self.src_seq_embedding, dim=-1)
+      self.norm_tgt_seq_embedding = tf.nn.l2_normalize(self.tgt_seq_embedding, dim=-1)
+
+      # this similarity tensor is used for prediction, tensor shape is (src_batch_size * target_space_size )
+      # self.similarity = tf.matmul( self.norm_src_seq_embedding, self.norm_tgt_seq_embedding, transpose_b=True)
       self.similarity = tf.matmul( self.src_seq_embedding, self.tgt_seq_embedding, transpose_b=True)
-      # self.norm_similarity = tf.matmul( tf.nn.l2_normalize(self.src_seq_embedding, 1),
-      #                                   tf.nn.l2_normalize( self.tgt_seq_embedding, 1), transpose_b=True)
+      #self.similarity = tf.Print(self.similarity, [self.similarity], summarize=571, message='similarity')
+
+
+      # self.norm_similarity = tf.matmul( tf.nn.l2_normalize(self.src_seq_embedding, dim=-1), tf.nn.l2_normalize( self.tgt_seq_embedding, dim=-1), transpose_b=True)
+      # this binary logit tensor is used for training, tensor shape is (src_batch_size * 1)
+
+      # self.binarylogit =  tf.reduce_sum( tf.multiply(self.norm_src_seq_embedding, self.norm_tgt_seq_embedding) , axis=-1 )
+      self.binarylogit =  tf.reduce_sum( tf.multiply(self.src_seq_embedding, self.tgt_seq_embedding) , axis=-1 )
+
+      # self.binarylogit = tf.Print(self.binarylogit, [self.binarylogit], summarize=60, message='binarylogit')
+
 
     with tf.variable_scope('training_loss'):
       # # doing sampled softmax loss at here:
@@ -350,9 +363,12 @@ class SSEModel(object):
       #         tf.expand_dims( self._labels, 1 ), self.neg_sample_size, self.targetSpaceSize) )
 
       #doing full target space softmax loss at here
-      self.loss = tf.reduce_mean( tf.nn.sparse_softmax_cross_entropy_with_logits( logits= self.similarity, labels= self._labels) )
+      # self.loss = tf.reduce_mean( tf.nn.sparse_softmax_cross_entropy_with_logits( logits= self.similarity, labels= self._labels) )
 
-      #TODO: try sigmoid loss function later: tf.nn.sigmoid_cross_entropy_with_logits(logits, targets, name=None)
+      #TODO: try logistic Binary cross entropy loss function later: tf.nn.sigmoid_cross_entropy_with_logits(logits, targets, name=None)
+      self.loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits( logits=self.binarylogit, labels= self._labels) )
+      # self.loss = tf.Print(self.loss, [self.loss], summarize=60, message='loss')
+
 
   def set_top_n(self, top_n):
     self.TOP_N = top_n
@@ -369,7 +385,8 @@ class SSEModel(object):
       #normalize conf score
       self.predicted_tgts_score = tf.nn.l2_normalize(self.predicted_tgts_score, 1)
       #self.predicted_tgts_score, self.predicted_labels = tf.nn.top_k(self.norm_similarity, self.TOP_N, sorted=True)
-
+      #
+      # self.predictResults = self.similarity
 
   def _def_optimize(self):
     """
@@ -423,34 +440,6 @@ class SSEModel(object):
     return tf.summary.merge([loss])
 
 
-  def get_train_batch(self, train_set, batch_size, tgtID_FullLabelMap):
-
-    """
-    :param train_set: tuples of positive trainpair in format of ([source_tokens, target_tokens, src_len, tgt_len, tgtID])
-    :param batch_size: postive samples in each batch
-    :param MAX_SEQ_LEN: max seq length for each input data.
-    :param tgtID_FullLabelMap:  full targetSpace tgtID to label mapping
-    :return: a tuple of batched mixed  samples in format of:
-        (source_inputs, labels, src_length)
-        source_inputs: [batch_size , MAX_SEQ_LEN]
-        labels: [batch_size ] : integar ranged from [0, num_of_tgt_classes
-        src_length: [batch_size ]
-    """
-
-    # Get a random batch of positive training pairs from train_set,
-    # and then generate labels ( classes labeled from [0, num_target_space)
-
-    source_inputs, labels, src_lens = [], [], []
-    for idx in range(batch_size):
-      #add a postive pair to batch
-      source_input,  src_len,  tgtID = random.choice(train_set)
-      source_inputs.append( source_input )
-      labels.append( tgtID_FullLabelMap[tgtID] )
-      src_lens.append( src_len )
-
-    return  np.array(source_inputs, dtype=np.int32), np.array(labels, dtype=np.int64), np.array(src_lens, dtype=np.int32)
-
-
   def get_predict_feed_dict(self, srcSeqs, tgtSeqs, src_lens, tgt_lens ):
     """
     Returns a batch feed dict for given srcSequences passed as
@@ -472,7 +461,7 @@ class SSEModel(object):
     """
     d = {}
     d[self._src_input_data] = np.array(srcSeqs, dtype=np.int32)
-    d[self._labels] = np.array(labels, dtype=np.int64)
+    d[self._labels] = np.array(labels, dtype=np.float32)
     d[self._tgt_input_data] = np.array(tgtSeqs, dtype=np.int32)
     d[self._src_lens] = np.array(src_lens, dtype=np.int32)
     d[self._tgt_lens] = np.array(tgt_lens, dtype=np.int32)
