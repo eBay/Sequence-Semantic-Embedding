@@ -31,27 +31,27 @@ Once webserver has started, you can open a browse and send a GET request like: h
 
 See the [Content](#content) below for more details on how SSE training works, and how to use it to build the complete solution for your own NLP task with your own dataset.
 
-### [Contents](#content)
+### [Content](#content)
 
-* [Setup Instructions](#setup)
-* [SSE Model Training](#modeltraining)
-    * [Basic Idea](#idea)
-    * [Training Data](#data)
-    * [Train Model](#train)
-    * [Visualize Training progress in Tensor Board](#tensorboard)
-* [Command Line Demo](#demo)
-* [Setup WebService](#service)
-* [Call WebService to get results](#callservice) 
-* [Build Your Own NLP task services with your own data](#customizebuild)
-    * [text classification](#classification)
-    * [search engine relevance ranking](#ranking)
-    * [cross-lingual information retrieval](#crosslingual)
-    * [question answering](#qna)
-* [References](#reference)
+* [Setup Instructions](#setup-instructions)
+* [SSE Model Training](#sse-model-training)
+    * [Basic Idea](#basic-idea)
+    * [Training Data](#training-data)
+    * [Train Model](#train-model)
+    * [Visualize Training progress in TensorBoard](#visualize-training-progress-in-tensorboard)
+* [Command Line Demo](#command-line-demo)
+* [Setup WebService](#setup-webservice)
+* [Call WebService to get results](#call-webservice-to-get-results)
+* [Build Your Own NLP task services with your data](#build-your-own-nlp-task-services-with-your-data)
+    * [Text Classification](#text-classification)
+    * [Search Relevance Ranking](#search-relevance-ranking)
+    * [Cross-Lingual Information Retrieval](#cross-lingual-information-retrieval)
+    * [Question Answering](#question-answering)
+* [References](#references)
 
 ---
 
-### Setup Instructions
+## Setup Instructions
 
 The code of SSE toolkit support both python2 and python3. Just issue below command to download the repo and install dependencies such as tensorflow.
 
@@ -61,9 +61,9 @@ cd Sequence-Semantic-Embedding
 ./env_setup.sh
 ```
 
-### SSE Model Training
+## SSE Model Training
 
-## Basic Idea
+### Basic Idea
 
 SSE encoder framework supports three different types of network configuration modes: source-encoder-only, dual-encoder and shared-encoder. 
 
@@ -76,7 +76,7 @@ SSE encoder framework supports three different types of network configuration mo
 * In shared-encoder mode, SSE will train one single encoder model(RNN/LSTM/CNN) shared for both source sequence and target sequence. This mode is suitable for open target space tasks such as question answering system or relevance ranking system, since the target sequence space in those tasks is open and dynamically changing, a specific target sequence encoder model is needed to generate embeddings for new unobserved target sequence outside of training stage. In shared-encoder mode, the source sequence encoder model is the same as target sequence encoder mode. Thus this mode is better for tasks where the vocabulary between source sequence and target sequence are similar. A sample network config diagram is shown as below:
     ![computation graph](images/shared-encoderModeForSSE.png)
 
-## Training Data
+### Training Data
 
 This repo contains some sample raw datasets for four types of NLP task in below four subfolders:
 
@@ -89,49 +89,44 @@ This repo contains some sample raw datasets for four types of NLP task in below 
 * **rawdata-crosslingual**: The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains the English language based search inventory's listing_title and listing_id, seperated by tab. The TrainPair and EvalPair have the same data format for training corpus and evaluation corpus. The file format is source_sequence(Chinese/English/Mixed-Languages search query), target_sequence(English listing title), target_sequence_id(English listing id), seperated by tab.  
 
 
-## Train Model
+### Train Model
 
 To start training your models, issue command as below. For classification task, use option of *train-classification* ; for question answer task, use option of *train-qna*, for relevance ranking task use option of *train-ranking*, for cross-lingual task use option of *train-crosslingual*
 
 ``` bash
 make train-classification
-
 ```
 
-## Visualize Training progress in Tensor Board
+### Visualize Training progress in TensorBoard
 
 Use below command to start TF's tensorboard and view the Training progress in your webbrowser.
 
 ``` bash
-$> tensorboard --logdir=models-classification
-
+tensorboard --logdir=models-classification
 ```
 
-## Command Line Demo
+### Command Line Demo
 
 Use below command to start the demo app and then follow the prompt messages. 
 
 ``` bash
 make demo-classification
-
 ```
 
-## Setup WebService
+### Setup WebService
 
 ``` bash
 export SSE_MODEL_DIR=models-classification
 export FLASK_APP=webserver.py
 python -m flask run --port 5000 --host=0.0.0.0
-
 ```
 
-## Call WebService to get results
+### Call WebService to get results
 
 Once the webserver starts, you can use below curl command to test its prediction results for your NLP task.
 
 ``` bash
 curl -i -H "Accept: application/json" -H "Content-Type: application/json" -X GET http://<your-ip-address>:5000/api/classify?keywords=men's running shoes
-
 ```
 or you can just open a web browser and put a GET request like below to see your NLP task service result:
 
@@ -140,16 +135,15 @@ http://<your-ip-address>:5000/api/classify?keywords=men's running shoes
 ```
 
 
-### Build Your Own NLP task services with your own data
+## Build Your Own NLP task services with your data
 
-##  text classification
+###  Text Classification
 
 The mission of text classification task is to classify a given source text sequence into the most relevant/correct target class(es). If there is only one possible correct class label for any given source text, i.e., the class labels are exclusive to each other, this is called single-label text classification task. If there are multiple correct class labels can be associated with any given source text, i.e., the class labels are independent to each other, this is called multiple-label text classification task.
 
 The current supplied sample classification raw dataset is from single-label text classification task. A newer version sample data for multiple-label text classification raw dataset will be released in near future.
 
-If you want to train the model and build the webservice with your own dataset from scratch,  you can simply replace zip file in rawdata-classification folder with your own data and keep the same data format specified in [Training Data](#data) section. And then issue below commands to train out your own model, build the demo app and setup your webservice:
-
+If you want to train the model and build the webservice with your own dataset from scratch,  you can simply replace zip file in rawdata-classification folder with your own data and keep the same data format specified in [Training Data](#training-data) section. And then issue below commands to train out your own model, build the demo app and setup your webservice:
 
 ```bash
 make train-classificastion
@@ -167,11 +161,11 @@ http://<your-ip-address>:5000/api/classify?keywords=men's running shoes
 
 The webserver will return a json object with a list of top 10 (default) most relevant target class with ID, names and matching scores.
 
-## question answering
+### Question Answering
 
 The mission of question answering task is to provide the most relevant answer for a given question. The example we provided here is for simple question answering scenarios.  We have a set of FAQ answer documents, when a user asking a question, we provide the most relevant FAQ answer document back to the user.
 
-If you want to build your own question answering webservice with your own FAQ dataset from scratch,  you can simply replace the zip file in rawdata-qna folder with your own data and keep the same data format specified in [Training Data](#data) section. And then issue below commands to train out your own model, build the demo app and setup your webservice:
+If you want to build your own question answering webservice with your own FAQ dataset from scratch,  you can simply replace the zip file in rawdata-qna folder with your own data and keep the same data format specified in [Training Data](#training-data) section. And then issue below commands to train out your own model, build the demo app and setup your webservice:
 
 
 ```bash
@@ -191,15 +185,16 @@ http://<your-ip-address>:5000/api/qna?question=how does secure pay work&?nbest=5
 The webserver will return a json object with a list of top 5 (default) most relevant answer document with document_ID, document_content and matching scores.
 
 
-## search engine relevance ranking
+### Search Relevance Ranking
 
 To be added very soon.
 
-## cross-lingual information retrieval
+### Cross-lingual Information Retrieval
 
 To be added very soon.
 
 ## References
+
 More detailed information about the theory and practice for deep learning(DNN/CNN/LSTM/RNN etc.) in NLP area can be found in papers and tutorials as below:
 
  * [ Deep Learning for Natural Language Processing: Theory and Practice (Tutorial) ](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/CIKM14_tutorial_HeGaoDeng.pdf)
