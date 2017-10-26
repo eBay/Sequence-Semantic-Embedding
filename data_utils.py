@@ -226,6 +226,7 @@ def get_search_corpus(processed_data_dir, encoder, max_seq_length):
   :param max_seq_length:
   :return:
   """
+  raise NotImplementedError('Search Ranking Task will be supported very soon.')
 
 
 def get_questionAnswer_corpus(processed_data_dir, encoder, max_seq_length):
@@ -282,9 +283,9 @@ def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, task_typ
   # create training corpus and evaluation corpus per task_type
   if task_type.lower().strip() == "classification":
     train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap = get_classification_corpus( processed_data_dir, encoder, max_seq_length)
-  elif task_type.lower().strip() in ["search", "crosslanguages" ]:
+  elif task_type.lower().strip() in ["ranking", "crosslingual" ]:
     train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap = get_search_corpus( processed_data_dir, encoder,  max_seq_length)
-  elif task_type.lower().strip()  == "questionanswer":
+  elif task_type.lower().strip()  == "qna":
     train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap = get_questionAnswer_corpus(processed_data_dir, encoder, max_seq_length)
   else:
     raise ValueError("Unsupported task_type. Please use one of: classification, search, crosslanguages, questionanswer")

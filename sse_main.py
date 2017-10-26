@@ -66,7 +66,7 @@ tf.app.flags.DEFINE_integer("max_epoc", 8, "max epoc number for training procedu
 tf.app.flags.DEFINE_integer("predict_nbest", 20, "max top N for evaluation prediction.")
 
 tf.app.flags.DEFINE_string("task_type", 'classification',
-                           "Type of tasks. We provide data, training receipe and service demos for four different type tasks:  classification, search, questionanswer, crosslanguages")
+                           "Type of tasks. We provide data, training receipe and service demos for four different type tasks:  classification, ranking, qna, crosslingual")
 tf.app.flags.DEFINE_string("data_dir", 'rawdata-classification', "Data directory")
 tf.app.flags.DEFINE_string("model_dir", 'models-classification', "Trained model directory.")
 tf.app.flags.DEFINE_string("export_dir", 'exports-classification', "Trained model directory.")
