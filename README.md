@@ -8,11 +8,11 @@ SSE model translates a sequence of symbols into a vector of numeric numbers, so 
 * **Question answering task**: e.g.,  mapping a question to its most suitable answers.
 * **Cross lingual information retrieval task**: e.g., mapping a Chinese/English/Mixed-Language search query to its most relevant English documents in inventory without translating Chinese to English.
 
-Depending on each specific task, similar semantic meanings can have different definitions. For example, in the category classification task, similar semantic meanings means that for each correct pair of (listing-title, category), the SSE of title is close to the SSE of corresponding category.  While in the information retrieval task, similar semantic meaning means for each relevant pair of (query, document), the SSE of query is close to the SSE of relevant document. While in the question answering task, the SSE of question is close to the SSE of correct answers.
+Depending on each specific task, similar semantic meanings can have different definitions. For example, in the category classification task, similar semantic meanings means that for each correct pair of (listing-title, category), the SSE of listing-title is close to the SSE of corresponding category.  While in the information retrieval task, similar semantic meaning means for each relevant pair of (query, document), the SSE of query is close to the SSE of relevant document. While in the question answering task, the SSE of question is close to the SSE of correct answers.
 
 This repo contains some sample raw data, tools and recipes to allow user establish complete End2End solutions from scratch for four different typical NLP tasks: text classification, relevance ranking, cross-language information retrieval and question answering. This includes deep learning model training/testing pipeline, index generating pipeline, command line demo app, and the run-time RESTful webservices with trained models for these NLP tasks. By replacing supplied raw data with your own data, users can easily establish a complete solution for their own NLP tasks with this deep learning based SSE tech.
 
-Here is the quick-start instruction to build a text classification webservice from scratch including download the repo, setup environment, train model, run demo app and setup webserver.
+Here is the quick-start instruction to build a text classification webservice from scratch including download the repo, setup environment, train model, run demo app and setup RESTful webservice.
 
 
 ```bash
@@ -20,9 +20,11 @@ git clone https://github.com/eBay/Sequence-Semantic-Embedding.git
 cd Sequence-Semantic-Embedding
 ./env_setup.sh
 make train-classificastion
+make index-classification
 make demo-classification
 export FLASK_APP=webserver.py
 export MODEL_TYPE=classification
+export INDEX_FILE=targetEncodingIndex.tsv
 python -m flask run --port 5000 --host=0.0.0.0
 ```
 
@@ -39,6 +41,7 @@ See the [Content](#content) below for more details on how SSE training works, an
     * [Training Data](#training-data)
     * [Train Model](#train-model)
     * [Visualize Training progress in TensorBoard](#visualize-training-progress-in-tensorboard)
+* [Index Generating](#index-generating)
 * [Command Line Demo](#command-line-demo)
 * [Setup WebService](#setup-webservice)
 * [Call WebService to get results](#call-webservice-to-get-results)
@@ -80,15 +83,43 @@ SSE encoder framework supports three different types of network configuration mo
 
 This repo contains some sample raw datasets for four types of NLP task in below four subfolders:
 
-* **rawdata-classification**: The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains target's category_class_name and category_class_ID, seperated by tab. The TrainPair and EvalPair have the same data format for training corpus and evaluation corpus. The file format is source_sequence(listing title), target_class_sequence(category name), target_class_id(category id), seperated by tab. The supplied sample raw data set is based on eBay's listing title's category classification task. This sample data is limited to eBay CSA (Clothes, Shoes and Accessaries) categories. The source sequence data are listing titles, and the target category data are 571 different leaf categories about shoes, clothes and accessaries in eBay website.
-    
-* **rawdata-qna**: The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains all possible answer document's whole content and the answer_document_id, seperated by tab. The TrainPair and EvalPair have the same data format for training corpus and evaluation corpus. The file format is source_sequence(question), target_sequence(answer_document_content), target_sequence_id(answer_document_id), seperated by tab. 
+* **rawdata-classification**: 
+  
+  This classification sample data is limited to eBay CSA (Clothes, Shoes and Accessaries) category classification task. The source sequence data is eBay listing titles, and the target sequence data is 571 different leaf categories about shoes, clothes and accessaries in eBay website. The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains 571 target's category_class_name and category_class_ID, seperated by tab. The format of TrainPair/EvalPair is source_sequence(listing title), and target_class_id(category id), seperated by tab. 
+  
+  An example line in targetIDs file:
+  ```
+  Clothing, Shoes & Accessories:Kids' Clothing, Shoes & Accs:Boys' Clothing (Sizes 4 & Up):Jeans	77475
+  ```
 
-* **rawdata-ranking**: (To be added very soon.) The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains the search inventory's listing_title and listing_id, seperated by tab. The TrainPair and EvalPair have the same data format for training corpus and evaluation corpus. The file format is source_sequence(search query), target_sequence(listing title), target_sequence_id(listing id), seperated by tab.
+  An example line in TrainPair file:
+  ```
+  Abercrombie boys jeans size 12 Nice!	77475
+  ```
+  
+* **rawdata-qna**: 
 
-* **rawdata-crosslingual**: (To be added very soon.) The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains the English language based search inventory's listing_title and listing_id, seperated by tab. The TrainPair and EvalPair have the same data format for training corpus and evaluation corpus. The file format is source_sequence(Chinese/English/Mixed-Languages search query), target_sequence(English listing title), target_sequence_id(English listing id), seperated by tab.
+  This question answering sample data is limited to a small set of eBay customer support's Frequent Asked Questions documents set. The source sequence data is user's asked questions, and the target sequence data is the content of most suitable FAQ answer document. The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains the FAQ answer document content and their IDs, seperated by tab. The format of TrainPair/EvalPair is source_sequence(user asked questions), and target_class_id(FAQ answer document ID), seperated by tab. 
+  
+* **rawdata-ranking**: 
 
+  This search ranking sample data contains nearly 1 million product titles and 84K search queries about Clothes, Shoes and Accessariese in eCommerce domain. The source sequence data is user search query, and the target sequence data is a list of relevant listing titles corresponding to the given query. The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains nearly 1 million listing titles and listing_ID, seperated by tab. The format of TrainPair/EvalPair is source_sequence(search query) and list of relevant listing ids. 
+  
+  An example line in targetIDs file:
+  ```
+  air jordan xii 12 white/dynamic pink size 4y 7y valentine's day gs pre order	Item#876583
+  ```
 
+  An example line in TrainPair file:
+  ```
+  air jordan 12 gs dynamic pink	Item#876583|Item#439598|Item#563089|Item#709305|Item#460164|Item#45300|Item#791751|Item#523586|Item#275794|Item#516742|Item#444557|Item#700634|Item#860517|Item#775042|Item#731907|Item#852612|Item#877692|Item#453434|Item#582210|Item#200407|Item#196434
+  ```
+
+* **rawdata-crosslingual**: (To be added very soon.) 
+
+  This cross lingual information retrieval sample data contains nearly 1 million product titles in English and 50K Chinese/English/Chinese-English-Mixed search queries about Clothes, Shoes and Accessariese in eCommerce domain. The source sequence data is user search query, and the target sequence data is a list of relevant listing titles corresponding to the given query. The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains nearly 1 million listing titles and listing_ID, seperated by tab. The format of TrainPair/EvalPair is source_sequence(search query) and list of relevant listing ids.
+  
+  
 ### Train Model
 
 To start training your models, issue command as below. For classification task, use option of *train-classification* ; for question answer task, use option of *train-qna*, for relevance ranking task use option of *train-ranking*, for cross-lingual task use option of *train-crosslingual*
@@ -105,7 +136,26 @@ Use below command to start TF's tensorboard and view the Training progress in yo
 tensorboard --logdir=models-classification
 ```
 
-### Command Line Demo
+## Index Generating
+
+  For open target space tasks like search ranking, question answering or cross-lingual information retrieval, there is a need to generate SSE embeddings for new unobserved target sequences outside of model training stage. 
+  
+  You can use below commands to generate SSE embedding index for your new target data outside of model training stage. 
+  
+Use default parameters:
+
+``` bash
+#use default settings: modelDir=models-ranking ,  rawTargetFile=targetIDs, targetSSEIndex=targetEncodingIndex.tsv
+make index-ranking
+```
+Use customizable parameters:
+
+``` bash
+python sse_index.py  --idx_model_dir=models-ranking --idx_rawfilename=targetIDs --idx_encodedIndexFile=targetEncodingIndex.tsv
+```
+
+
+## Command Line Demo
 
 Use below command to start the demo app and then follow the prompt messages. 
 
@@ -113,15 +163,17 @@ Use below command to start the demo app and then follow the prompt messages.
 make demo-classification
 ```
 
-### Setup WebService
+## Setup WebService
 
 ``` bash
 export SSE_MODEL_DIR=models-classification
+export INDEX_FILE=targetEncodingIndex.tsv
 export FLASK_APP=webserver.py
 python -m flask run --port 5000 --host=0.0.0.0
 ```
 
-### Call WebService to get results
+
+## Call WebService to get results
 
 Once the webserver starts, you can use below curl command to test its prediction results for your NLP task.
 
@@ -147,8 +199,10 @@ If you want to train the model and build the webservice with your own dataset fr
 
 ```bash
 make train-classificastion
+make index-classification
 make demo-classification
 export FLASK_APP=webserver.py
+export INDEX_FILE=targetEncodingIndex.tsv
 export MODEL_TYPE=classification
 python -m flask run --port 5000 --host=0.0.0.0
 ```
@@ -165,14 +219,16 @@ The webserver will return a json object with a list of top 10 (default) most rel
 
 The mission of question answering task is to provide the most relevant answer for a given question. The example we provided here is for simple question answering scenarios.  We have a set of FAQ answer documents, when a user asking a question, we provide the most relevant FAQ answer document back to the user.
 
-If you want to build your own question answering webservice with your own FAQ dataset from scratch,  you can simply replace the zip file in rawdata-qna folder with your own data and keep the same data format specified in [Training Data](#training-data) section. And then issue below commands to train out your own model, build the demo app and setup your webservice:
+If you want to build your own question answering webservice with your own FAQ dataset from scratch,  you can simply replace the zip file in rawdata-qna folder with your own data and keep the same data format specified in [Training Data](#training-data) section. And then issue below commands to train out your own model, build the index, run the demo app and setup the webservice:
 
 
 ```bash
 make train-qna
+make index-qna
 make demo-qna
 export FLASK_APP=webserver.py
 export MODEL_TYPE=qna
+export INDEX_FILE=targetEncodingIndex.tsv
 python -m flask run --port 5000 --host=0.0.0.0
 ```
 
@@ -187,7 +243,29 @@ The webserver will return a json object with a list of top 5 (default) most rele
 
 ### Search Relevance Ranking
 
-To be added very soon.
+The mission of search relevance ranking task is to provide the most relevant documents for a given search query from a vast amount of documents. The provided sample dataset allows user search relevant items from nearly 1 million eBay listings about Clothes, Shoes and Accessariese in eCommerce domain.
+
+If you want to build your own search relevance ranking webservice with your own domain dataset from scratch,  you can simply replace the zip file in rawdata-ranking folder with your own data and keep the same data format specified in [Training Data](#training-data) section. And then issue below commands to train out your own model, build the index, run the demo app and setup the webservice:
+
+
+```bash
+make train-ranking
+make index-ranking
+make demo-ranking
+export FLASK_APP=webserver.py
+export MODEL_TYPE=ranking
+export INDEX_FILE=targetEncodingIndex.tsv
+python -m flask run --port 5000 --host=0.0.0.0
+```
+
+Once the webserver starts, you can just open a web browser and put a GET request like below to see your question answering web service result:
+
+```
+http://<your-ip-address>:5000/api/search?query=red nike shoes&?nbest=10
+```
+
+The webserver will return a json object with a list of top 10 (default) most relevant item with listing_title, Item_ID,  and matching scores.
+
 
 ### Cross-lingual Information Retrieval
 

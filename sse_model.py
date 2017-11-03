@@ -91,7 +91,7 @@ class SSEModel(object):
 
   def __init__(self, MAX_SEQ_LENGTH, max_gradient_norm, vocab_size,  word_embed_size, seq_embed_size,
                src_cell_size, tgt_cell_size, num_layers,
-               learning_rate, learning_rate_decay_factor, targetSpaceSize, network_mode='source-encoder-only', forward_only=False, TOP_N=20, name="SSEModel" ):
+               learning_rate, learning_rate_decay_factor, targetSpaceSize, network_mode='source-encoder-only', forward_only=False, TOP_N=20, alpha=1.5, neg_samples=2,  name="SSEModel" ):
 
 
     """ Create the Sequence Semantic Embedding Model.
@@ -130,6 +130,8 @@ class SSEModel(object):
     self.learning_rate_decay_op = self.learning_rate.assign(self.learning_rate * learning_rate_decay_factor)
     self.global_step = tf.Variable(0, name="global_step", trainable=False)
     self.targetSpaceSize = targetSpaceSize
+    self.alpha = alpha
+    self.neg_samples = neg_samples
 
 
     # setup basic model cell type to be LSTM or GRU or CNN
@@ -142,7 +144,7 @@ class SSEModel(object):
     self._def_optimize()
     self._def_predict()
 
-    self.saver = tf.train.Saver(tf.all_variables() , max_to_keep=20)
+    self.saver = tf.train.Saver(  tf.global_variables()  , max_to_keep=20)
 
   @staticmethod
   def _last_relevant(output, length):
@@ -346,14 +348,12 @@ class SSEModel(object):
       self.similarity = tf.matmul( self.src_seq_embedding, self.tgt_seq_embedding, transpose_b=True)
       #self.similarity = tf.Print(self.similarity, [self.similarity], summarize=571, message='similarity')
 
-
       # self.norm_similarity = tf.matmul( tf.nn.l2_normalize(self.src_seq_embedding, dim=-1), tf.nn.l2_normalize( self.tgt_seq_embedding, dim=-1), transpose_b=True)
       # this binary logit tensor is used for training, tensor shape is (src_batch_size * 1)
 
-      # self.binarylogit =  tf.reduce_sum( tf.multiply(self.norm_src_seq_embedding, self.norm_tgt_seq_embedding) , axis=-1 )
+      #self.binarylogit =  tf.reduce_sum( tf.multiply(self.norm_src_seq_embedding, self.norm_tgt_seq_embedding) , axis=-1 )
       self.binarylogit =  tf.reduce_sum( tf.multiply(self.src_seq_embedding, self.tgt_seq_embedding) , axis=-1 )
-
-      # self.binarylogit = tf.Print(self.binarylogit, [self.binarylogit], summarize=60, message='binarylogit')
+      #self.binarylogit = tf.Print(self.binarylogit, [self.binarylogit], summarize=6, message='binarylogit')
 
 
     with tf.variable_scope('training_loss'):
@@ -366,9 +366,17 @@ class SSEModel(object):
       # self.loss = tf.reduce_mean( tf.nn.sparse_softmax_cross_entropy_with_logits( logits= self.similarity, labels= self._labels) )
 
       #TODO: try logistic Binary cross entropy loss function later: tf.nn.sigmoid_cross_entropy_with_logits(logits, targets, name=None)
-      self.loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits( logits=self.binarylogit, labels= self._labels) )
-      # self.loss = tf.Print(self.loss, [self.loss], summarize=60, message='loss')
+      # basic bianry logistic loss, treat pos and neg the same weight
+      #self.loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits( logits=self.binarylogit, labels= self._labels) )
+      # weighted loss, to treat pos/neg loss with different weight
+      self.loss = tf.reduce_mean( tf.nn.weighted_cross_entropy_with_logits( logits=  self.binarylogit, targets= self._labels, pos_weight= float(self.alpha) * float(self.neg_samples) ))
+      #self.loss = tf.Print(self.loss, [self.loss], summarize=6, message='loss')
 
+
+      #compute the binary training accuracy
+      self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.pow(1.00003, self.binarylogit - 0.9))))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(tf.pow(1.00003, 0.05 - self.binarylogit))))
+      # self.train_acc = ( (1.0 + float(self.neg_samples)) * tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.pow(1.00003, self.binarylogit - 0.9)))) )  + ( (1.0 + float(self.neg_samples)) / float(self.neg_samples) ) * tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(tf.pow(1.00003, 0.05 - self.binarylogit))))
+      # self.train_acc = self.train_acc / 2.0
 
   def set_top_n(self, top_n):
     self.TOP_N = top_n
@@ -395,10 +403,9 @@ class SSEModel(object):
 
     #optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
     optimizer = tf.train.AdagradOptimizer(self.learning_rate)
-
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), self.max_gradient_norm )
-    self.train = optimizer.apply_gradients( list(zip(grads, tvars)), global_step=self.global_step)  #tutorial version??
+    self.train = optimizer.apply_gradients( list(zip(grads, tvars)), global_step=self.global_step)
 
     # #TODO: try different optimizer to see if any improvements
     # self.train = optimizer.minimize(self.loss, global_step=self.global_step, gate_gradients=optimizer.GATE_NONE) #default version?
@@ -466,3 +473,25 @@ class SSEModel(object):
     d[self._src_lens] = np.array(src_lens, dtype=np.int32)
     d[self._tgt_lens] = np.array(tgt_lens, dtype=np.int32)
     return d
+
+  def get_source_encoding_feed_dict(self, srcSeqs, src_lens):
+    """
+    Returns a batch feed dict for given srcSquences.
+
+    """
+    d = {}
+    d[self._src_input_data] = np.array(srcSeqs, dtype=np.int32)
+    d[self._src_lens] = np.array(src_lens, dtype=np.int32)
+    return d
+
+  def get_target_encoding_feed_dict(self, tgtSeqs, tgt_lens):
+    """
+    Returns a batch feed dict for given tgtSequences.
+
+    """
+    d = {}
+    d[self._tgt_input_data] = np.array(tgtSeqs, dtype=np.int32)
+    d[self._tgt_lens] = np.array(tgt_lens, dtype=np.int32)
+    return d
+
+

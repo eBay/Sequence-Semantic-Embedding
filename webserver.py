@@ -49,29 +49,42 @@ class FlaskApp(Flask):
     self.model = 'Do my initialization work here, loading model and index ....'
     self.model_type = os.environ.get("MODEL_TYPE", "classification")
     self.model_dir = "models-" + self.model_type
+    self.indexFile = os.environ.get("INDEX_FILE", "targetEncodingIndex.tsv")
     print("In app class: Received flask appconfig is: " + os.environ.get('MODEL_TYPE', 'Default_classification') )
-
 
     if not os.path.exists(self.model_dir):
       print('Model folder %s does not exist!!' % self.model_dir )
       exit(-1)
 
-    encodedFullTargetSpace_path = os.path.join(self.model_dir, "encoded.FullTargetSpace")
-    if not os.path.exists(encodedFullTargetSpace_path):
-      print('Encoded full target space file not exist!!')
+    if not os.path.exists(os.path.join(self.model_dir, self.indexFile)):
+      print('Index File does not exist!!')
       exit(-1)
 
-
     # load full set targetSeqID data
-    self.encoder, self.encodedTgtSpace, self.tgtID_Name_Map = data_utils.load_encodedTargetSpace(self.model_dir)
-    fullTgtIdList = self.encodedTgtSpace.keys()
-    self.tgtLabel_IDMap = {idx: tgtid for (idx, tgtid) in enumerate(fullTgtIdList)}
-    self.tgtInput_batches = [self.encodedTgtSpace[tgtid] for tgtid in fullTgtIdList]
-    self.tgtLen_batches = [self.encodedTgtSpace[tgtid].index(text_encoder.PAD_ID) + 1 for tgtid in fullTgtIdList]
+    if not os.path.exists(os.path.join(self.model_dir, 'vocabulary.txt')):
+        print('Error!! Could not find vocabulary file for encoder in model folder.')
+        exit(-1)
+    self.encoder = text_encoder.SubwordTextEncoder(filename=os.path.join(self.model_dir, 'vocabulary.txt'))
+
+    # load full set target Index data
+    self.targetEncodings = []
+    self.targetIDs = []
+    self.targetIDNameMap = {}
+    idx = 0
+    for line in codecs.open(os.path.join(self.model_dir, self.indexFile), 'r', 'utf-8').readlines():
+        info = line.strip().split('\t')
+        if len(info) != 3:
+            print('Error in targetIndexFile! %s' % line)
+            continue
+        tgtid, tgtseq, tgtEncoding = info[0], info[1], info[2]
+        self.targetIDs.append(tgtid)
+        self.targetEncodings.append([float(f) for f in tgtEncoding.strip().split(',')])
+        self.targetIDNameMap[tgtid] = tgtseq
+        idx += 1
+    self.targetEncodings = np.array(self.targetEncodings)
 
     cfg = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)
     self.sess = tf.Session(config=cfg)
-    # check and load tensorflow models and related target space files
     #load model
     self.modelConfigs = data_utils.load_model_configs(self.model_dir)
     self.model = sse_model.SSEModel( int(self.modelConfigs['max_seq_length']), float(self.modelConfigs['max_gradient_norm']),
@@ -110,15 +123,17 @@ def classification():
       source_tokens = source_tokens[:int(app.modelConfigs['max_seq_length'])]
     else:
       source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(app.modelConfigs['max_seq_length']) - src_len - 1)
-
-    dict = app.model.get_predict_feed_dict(np.array([source_tokens]), app.tgtInput_batches, np.array([src_len]), app.tgtLen_batches)
-    pred_conf, pred_labels = app.sess.run([app.model.predicted_tgts_score, app.model.predicted_labels], feed_dict=dict)
-    pred_labels = np.vstack(pred_labels)
-    pred_conf = np.vstack(pred_conf)
-    top_confs = pred_conf[0][:nbest]
-    top_tgtIDs = [app.tgtLabel_IDMap[lbl] for lbl in pred_labels[0][:nbest]]
-    top_tgtNames = [app.tgtID_Name_Map[id] for id in top_tgtIDs]
+    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([src_len+1]))
+    sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
+    #sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
+    sourceEncodings = np.vstack(sourceEncodings)
+    distances = np.dot(sourceEncodings, app.targetEncodings.T)
+    rankedScore, rankedIdx = data_utils.getSortedResults(distances)
+    top_confs = rankedScore[0][:nbest]
+    top_tgtIDs = [app.targetIDs[lbl] for lbl in rankedIdx[0][:nbest]]
+    top_tgtNames = [app.targetIDNameMap[id] for id in top_tgtIDs]
     topResults = []
+
     for idx in range(nbest):
         print('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
         entry={}
@@ -127,8 +142,6 @@ def classification():
         entry['confidenceScore'] = float(top_confs[idx])
         topResults.append(entry)
     return jsonify( { 'ReqeustKeywords':keywords, 'ClassificationResults':topResults} )
-
-
 
 @app.route('/api/search', methods=['GET'])
 def relevanceRanking():
@@ -147,15 +160,17 @@ def relevanceRanking():
       source_tokens = source_tokens[:int(app.modelConfigs['max_seq_length'])]
     else:
       source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(app.modelConfigs['max_seq_length']) - src_len - 1)
-
-    dict = app.model.get_predict_feed_dict(np.array([source_tokens]), app.tgtInput_batches, np.array([src_len]), app.tgtLen_batches)
-    pred_conf, pred_labels = app.sess.run([app.model.predicted_tgts_score, app.model.predicted_labels], feed_dict=dict)
-    pred_labels = np.vstack(pred_labels)
-    pred_conf = np.vstack(pred_conf)
-    top_confs = pred_conf[0][:nbest]
-    top_tgtIDs = [app.tgtLabel_IDMap[lbl] for lbl in pred_labels[0][:nbest]]
-    top_tgtNames = [app.tgtID_Name_Map[id] for id in top_tgtIDs]
+    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([src_len+1]))
+    sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
+    #sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
+    sourceEncodings = np.vstack(sourceEncodings)
+    distances = np.dot(sourceEncodings, app.targetEncodings.T)
+    rankedScore, rankedIdx = data_utils.getSortedResults(distances)
+    top_confs = rankedScore[0][:nbest]
+    top_tgtIDs = [app.targetIDs[lbl] for lbl in rankedIdx[0][:nbest]]
+    top_tgtNames = [app.targetIDNameMap[id] for id in top_tgtIDs]
     topResults = []
+
     for idx in range(nbest):
         print('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
         entry={}
@@ -184,15 +199,18 @@ def questionAnswering():
       source_tokens = source_tokens[:int(app.modelConfigs['max_seq_length'])]
     else:
       source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(app.modelConfigs['max_seq_length']) - src_len - 1)
-
-    dict = app.model.get_predict_feed_dict(np.array([source_tokens]), app.tgtInput_batches, np.array([src_len]), app.tgtLen_batches)
-    pred_conf, pred_labels = app.sess.run([app.model.predicted_tgts_score, app.model.predicted_labels], feed_dict=dict)
-    pred_labels = np.vstack(pred_labels)
-    pred_conf = np.vstack(pred_conf)
-    top_confs = pred_conf[0][:nbest]
-    top_tgtIDs = [app.tgtLabel_IDMap[lbl] for lbl in pred_labels[0][:nbest]]
-    top_tgtNames = [app.tgtID_Name_Map[id] for id in top_tgtIDs]
+    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([src_len+1]))
+    sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
+    #sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
+    sourceEncodings = np.vstack(sourceEncodings)
+    distances = np.dot(sourceEncodings, app.targetEncodings.T)
+    rankedScore, rankedIdx = data_utils.getSortedResults(distances)
+    top_confs = rankedScore[0][:nbest]
+    top_tgtIDs = [app.targetIDs[lbl] for lbl in rankedIdx[0][:nbest]]
+    top_tgtNames = [app.targetIDNameMap[id] for id in top_tgtIDs]
     topResults = []
+
+
     for idx in range(nbest):
         print('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
         entry={}
@@ -220,15 +238,18 @@ def crosslingualSearch():
       source_tokens = source_tokens[:int(app.modelConfigs['max_seq_length'])]
     else:
       source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(app.modelConfigs['max_seq_length']) - src_len - 1)
-
-    dict = app.model.get_predict_feed_dict(np.array([source_tokens]), app.tgtInput_batches, np.array([src_len]), app.tgtLen_batches)
-    pred_conf, pred_labels = app.sess.run([app.model.predicted_tgts_score, app.model.predicted_labels], feed_dict=dict)
-    pred_labels = np.vstack(pred_labels)
-    pred_conf = np.vstack(pred_conf)
-    top_confs = pred_conf[0][:nbest]
-    top_tgtIDs = [app.tgtLabel_IDMap[lbl] for lbl in pred_labels[0][:nbest]]
-    top_tgtNames = [app.tgtID_Name_Map[id] for id in top_tgtIDs]
+    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([src_len+1]))
+    sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
+    #sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
+    sourceEncodings = np.vstack(sourceEncodings)
+    distances = np.dot(sourceEncodings, app.targetEncodings.T)
+    rankedScore, rankedIdx = data_utils.getSortedResults(distances)
+    top_confs = rankedScore[0][:nbest]
+    top_tgtIDs = [app.targetIDs[lbl] for lbl in rankedIdx[0][:nbest]]
+    top_tgtNames = [app.targetIDNameMap[id] for id in top_tgtIDs]
     topResults = []
+
+
     for idx in range(nbest):
         print('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
         entry={}

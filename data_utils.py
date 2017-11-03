@@ -51,12 +51,11 @@ import numpy as np
 import sys
 import text_encoder
 import tokenizer
-
+import time
 
 from six.moves import urllib
 
 from tensorflow.python.platform import gfile
-
 
 
 def maybe_download(directory, filename, url):
@@ -83,43 +82,39 @@ def gunzip_file(gz_path, new_path):
 
 
 def get_data_set(rawDir, processedDir):
-  train_path = os.path.join(processedDir, "Train")
-  dev_path = os.path.join(processedDir, "Eval")
-  if not (gfile.Exists(train_path +".target") and gfile.Exists(train_path +".source")):
+  if not (gfile.Exists(processedDir + "/TrainPairs") and gfile.Exists(processedDir + "/vocabulary.txt")):
     corpus_file = os.path.join(rawDir, "DataSet.tar.gz")
     if not gfile.Exists(corpus_file):
       print('Error! No corups file found at: %s' % corpus_file )
       exit(1)
     print("Extracting tar file %s" % corpus_file)
-    #extract out the TrainPairs file
     with tarfile.open(corpus_file, "r") as corpus_tar:
       corpus_tar.extractall(processedDir)
-    #produce the train corpus file
-    with codecs.open( train_path + '.source.Corpus', 'w', 'utf-8' ) as srcFile, \
-         codecs.open(train_path + '.target.Corpus', 'w', 'utf-8') as tgtFile:
+    with codecs.open( processedDir + '/sourceSeq.Corpus', 'w', 'utf-8' ) as srcFile, \
+         codecs.open(processedDir + '/targetSeq.Corpus', 'w', 'utf-8') as tgtFile:
+      # produce source seq corpus
       for line in codecs.open( os.path.join(processedDir, 'TrainPairs'), 'r', 'utf-8'):
-        info = line.lower().strip().split('\t') # srcSeq, tgtSeq, tgtId = line.strip().split('\t')
+        info = line.strip().split('\t') # srcSeq,  tgtId = line.strip().split('\t')
         if len(info) < 2:
           print('Error train pair data:%s' % line)
           continue
-        srcFile.write(info[0] + '\n')
-        tgtFile.write(info[1] + '\n')
-    #produce the eval corpus file
-    with codecs.open(dev_path + '.source.Corpus', 'w', 'utf-8') as srcFile, \
-         codecs.open(dev_path + '.target.Corpus', 'w', 'utf-8') as tgtFile:
+        srcFile.write(info[0].lower() + '\n')
       for line in codecs.open(os.path.join(processedDir, 'EvalPairs'), 'r', 'utf-8'):
-        info = line.lower().strip().split('\t') # srcSeq, tgtSeq, tgtId = line.strip().split('\t')
+        info = line.strip().split('\t')
         if len(info) < 2:
-          print('Error train pair data:%s' % line)
           continue
-        srcFile.write(info[0] + '\n')
-        tgtFile.write(info[1] + '\n')
+        srcFile.write(info[0].lower() + '\n')
+      # produce the target corpus file
+      for line in codecs.open(os.path.join(processedDir, 'targetIDs'), 'r', 'utf-8'):
+        info = line.strip().split('\t') # tgtSeq, tgtId = line.strip().split('\t')
+        if len(info) < 2:
+          print('Error in targetIDs file:%s' % line)
+          continue
+        tgtFile.write(info[0].lower() + '\n')
+  return
 
-  return train_path, dev_path
 
-
-
-def gen_classification_corpus( pairfilename, encodedTargetSpace, encoder, max_seq_length ):
+def gen_postive_corpus( pairfilename, encodedTargetSpace, encoder, max_seq_length ):
   """
 
   :param pairfilename:
@@ -129,19 +124,27 @@ def gen_classification_corpus( pairfilename, encodedTargetSpace, encoder, max_se
   """
   Corpus = []
   counter = 0
+  tgtIdSets = set(encodedTargetSpace.keys())
   for line in codecs.open( pairfilename , "r", 'utf-8'):
     info = line.strip().split('\t')
-    if len(info) != 3:
+    if len(info) != 2:
       print("File %s has Bad line of training data:\n %s" % ( pairfilename, line ) )
       continue
-    srcSeq, tgtSeq, tgtId = info
+    srcSeq,  tgtIds = info
     counter += 1
     if counter % 100000 == 0:
       print("  reading data line %d" % counter)
       sys.stdout.flush()
     # verify target sequence correctness
-    if tgtId not in set(encodedTargetSpace.keys()):
-      print('Error Detected!! trouble in finding targetID in target Space file!! %s' % line)
+    verifiedTgtIds = []
+    for tgtid in tgtIds.split('|'):
+      if tgtid not in tgtIdSets:
+        print('Error Detected!! trouble in finding targetID in target Space file!! %s' % line)
+        continue
+      else:
+        verifiedTgtIds.append(tgtid)
+    if len(verifiedTgtIds) == 0:
+      print('Not found any verified tgtIDs in line:%s' % line)
       continue
     source_tokens = encoder.encode(srcSeq.lower())
     seqlen = len(source_tokens)
@@ -151,120 +154,22 @@ def gen_classification_corpus( pairfilename, encodedTargetSpace, encoder, max_se
         srcSeq, seqlen, max_seq_length))
       continue
     source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_length - seqlen - 1)
-    Corpus.append( (source_tokens, tgtId ) )
+    Corpus.append( (source_tokens, verifiedTgtIds ) )
   return Corpus
 
 
-def get_classification_corpus(processed_data_dir, encoder, max_seq_length):
+def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, neg_samples,  max_seq_length):
   """
-
-  :param processed_data_dir: contains TrainPairs, EvalPairs and targetIDs files
-  :param encoder:
-  :param max_seq_length:
-  :return:
+  Get SSE training, and Evaluation related data, create tokenizer and vocabulary.
+  
+  :param raw_data_dir: 
+  :param processed_data_dir: 
+  :param vocabulary_size: 
+  :param neg_samples:
+  :param max_seq_length: 
+  :return: 
   """
-  #create Encoded TargetSpace Data
-  print("Generating classification training corpus .... ")
-  encodedFullTargetSpace = {}
-  tgtIdNameMap = {}
-  encodedFullTargetFile = codecs.open( os.path.join(processed_data_dir, "encoded.FullTargetSpace"), 'w', 'utf-8')
-  for line in codecs.open( os.path.join(processed_data_dir, "targetIDs"), 'r', 'utf-8'):
-    tgtSeq, id = line.strip().split('\t')
-    token_ids = encoder.encode(tgtSeq.lower())
-    seqlen = len(token_ids)
-    if seqlen > max_seq_length-1:
-      print( 'Error Deteced!!! \n Target:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (tgtSeq, seqlen, max_seq_length ))
-      continue
-    token_ids =  token_ids + [ text_encoder.EOS_ID ] + [ text_encoder.PAD_ID] * (max_seq_length - seqlen -1)
-    encodedFullTargetSpace[id] = token_ids
-    tgtIdNameMap[id] = tgtSeq
-    decoded_tgt = encoder.decode(token_ids)
-    subtoken_strings = [encoder._all_subtoken_strings[i] for i in token_ids]
-    #debugging
-    # encodedFullTargetFile.write(id + '\t' + tgtSeq.strip() + '\t' + ','.join([str(i) for i in token_ids]) + '\t' + ','.join(subtoken_strings)  + '\t' + decoded_tgt + '\n'  )
-    encodedFullTargetFile.write(id + '\t' + tgtSeq.strip() + '\t' + ','.join([str(i) for i in token_ids]) + '\n'  )
-
-  encodedFullTargetFile.close()
-
-  #create Encoded Training Corpus: (srcTokens, srcLen, tgtTokens, tgtLen, RelevanceLabel)
-  trainingCorpus = gen_classification_corpus( os.path.join(processed_data_dir, "TrainPairs" ), encodedFullTargetSpace, encoder, max_seq_length)
-  #creat evaluation corpus: (srcTokens, srcLen, tgtLabels)
-  evalCorpus = []
-  for line in codecs.open( os.path.join(processed_data_dir, "EvalPairs" ), "r", 'utf-8'):
-    info = line.strip().split('\t')
-    if len(info) != 3:
-      print("EvalFile has Bad line of training data:\n %s" % ( line ) )
-      continue
-    srcSeq, tgtSeq, tgtId = info
-    # verify target sequence correctness
-    if tgtId not in set(encodedFullTargetSpace.keys()):
-      print('Error Detected!! trouble in finding evalPairs targetID in target Space file!! %s' % line)
-      continue
-    source_tokens = encoder.encode(srcSeq.lower())
-    seqlen = len(source_tokens)
-    if seqlen > max_seq_length - 1:
-      print(
-        'Error Deteced!!! \n Source Seq:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
-        srcSeq, seqlen, max_seq_length))
-      continue
-    source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_length - seqlen - 1)
-    # get positive sample
-    evalCorpus.append((source_tokens, source_tokens.index(text_encoder.PAD_ID) +1, tgtId ) )
-
-  #debugging purpose
-  print("evalCorpus[1] is:\n source_tokens: %s \n source_length: %s \n tgtId: %s" % ( str(evalCorpus[1][0]), str(evalCorpus[1][1]), str(evalCorpus[1][2])  ) )
-
-  return trainingCorpus, evalCorpus, encodedFullTargetSpace, tgtIdNameMap
-
-
-def get_search_corpus(processed_data_dir, encoder, max_seq_length):
-  """
-
-  :param processed_data_dir:
-  :param encoder:
-  :param negative_samples:
-  :param max_seq_length:
-  :return:
-  """
-  raise NotImplementedError('Search Ranking Task will be supported very soon.')
-
-
-def get_questionAnswer_corpus(processed_data_dir, encoder, max_seq_length):
-  """
-
-  :param processed_data_dir: contains TrainPairs, EvalPairs and targetIDs files
-  :param encoder:
-  :param max_seq_length:
-  :return:
-  """
-  # note QnA task's data format is the same as Classification task. So we can reuse it.
-
-  return get_classification_corpus(processed_data_dir, encoder, max_seq_length)
-
-
-
-def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, task_type,  max_seq_length):
-  """Get SSE training-Evaluation data into data_dir, create vocabularies and tokenized data.
-
-  Args:
-    raw_data_dir:  directory contains the raw zipped dataset.
-    processed_data_dir: directory in which the processed data sets will be stored.
-    vocabulary_size: size of the vocabulary to create and use if no vocabulary file found in rawdata. Otherwise, use supplied vocabulary file.
-    task_type: different task_type has slightly different rawdata format, and need different treatment
-               for classification task, usually has TrainPairs, EvalPairs, targetSpaceID file
-               for search task,
-               for cross-lingual search tasks,
-               for question answer tasks,
-    max_seq_length: max number of tokens  of a single source/target sequence
-  Returns:
-    A tuple of 5 elements:
-      (1) path to encoded TrainPairs: targetID, Sequence of source token IDs
-      (2) path to encoded EvalPairs: targetID, Sequence of source token IDs
-      (3) path to encoded full TargetSpaces: targetID, Sequence of target token IDs
-      (4) path to the source vocabulary file,
-      (5) path to the target vocabulary file.
-  """
-  # extract corpus to the specified processed directory.
+  # unzip corpus to the specified processed directory.
   get_data_set(raw_data_dir, processed_data_dir)
 
   # generate vocab file if not available, otherwise, use supplied vocab file for encoder
@@ -280,18 +185,74 @@ def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, task_typ
     encoder.store_to_file(vocabFile)
     print("New vocabulary constructed.")
 
-  # create training corpus and evaluation corpus per task_type
-  if task_type.lower().strip() == "classification":
-    train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap = get_classification_corpus( processed_data_dir, encoder, max_seq_length)
-  elif task_type.lower().strip() in ["ranking", "crosslingual" ]:
-    train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap = get_search_corpus( processed_data_dir, encoder,  max_seq_length)
-  elif task_type.lower().strip()  == "qna":
-    train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap = get_questionAnswer_corpus(processed_data_dir, encoder, max_seq_length)
-  else:
-    raise ValueError("Unsupported task_type. Please use one of: classification, search, crosslanguages, questionanswer")
+  #create encoded TargetSpace Data
+  encodedFullTargetSpace = {}
+  tgtIdNameMap = {}
+  encodedFullTargetFile = codecs.open( os.path.join(processed_data_dir, "encoded.FullTargetSpace"), 'w', 'utf-8')
+  for line in codecs.open( os.path.join(processed_data_dir, "targetIDs"), 'r', 'utf-8'):
+    tgtSeq, id = line.strip().split('\t')
+    token_ids = encoder.encode(tgtSeq.lower())
+    seqlen = len(token_ids)
+    if seqlen > max_seq_length-1:
+      print( 'Error Detected!!! \n Target:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (tgtSeq, seqlen, max_seq_length ))
+      continue
+    token_ids =  token_ids + [ text_encoder.EOS_ID ] + [ text_encoder.PAD_ID] * (max_seq_length - seqlen -1)
+    encodedFullTargetSpace[id] = token_ids
+    tgtIdNameMap[id] = tgtSeq
+    encodedFullTargetFile.write(id + '\t' + tgtSeq.strip() + '\t' + ','.join([str(i) for i in token_ids]) + '\n'  )
+  encodedFullTargetFile.close()
 
-  return encoder, train_corpus, dev_corpus, encodedTgtSpace, tgtIdNameMap
+  #creat positive Evaluation corpus: (source_tokens, verifiedTgtIds )
+  evalCorpus = gen_postive_corpus( os.path.join(processed_data_dir, "EvalPairs" ), encodedFullTargetSpace, encoder, max_seq_length)
+  #debugging purpose
+  # print("evalCorpus[1] is:\n source_tokens: %s \n tgtId: %s" % ( str(evalCorpus[1][0]), str(evalCorpus[1][1])  ) )
 
+  #create positive Training Corpus: (source_tokens, verifiedTgtIds )
+  trainingPosCorpus = gen_postive_corpus(os.path.join(processed_data_dir, "TrainPairs" ), encodedFullTargetSpace, encoder, max_seq_length)
+
+  #create mixed binary Training Corpus: (source_tokens, src_len, tgt_tokesn, tgt_len, pos_neg_labels)
+  #every positive sample will followed by #neg_sample amount of negative samples
+  print("Generating training and evaluation corpus .... ")
+  random.shuffle(trainingPosCorpus)
+  fullSetTargetIds = list(encodedFullTargetSpace.keys())
+  fullSetLen = len(fullSetTargetIds)
+  fullSampleFlag = False
+  if fullSetLen > 10000:
+    fullSampleFlag = True
+  source_inputs, src_lens, tgt_inputs, tgt_lens, labels = [], [], [], [], []
+  count = 0
+  start_time = time.time()
+
+  for pos_entry in trainingPosCorpus:
+    source_tokens, verifiedTgtIds = pos_entry
+    count += 1
+    if fullSampleFlag:
+      negSets = fullSetTargetIds
+      negSetLen = fullSetLen - 1
+    else:
+      negSets = list(set(fullSetTargetIds) - set(verifiedTgtIds))
+      negSetLen = len(negSets) - 1
+    if count % 100000 == 0:
+      print("processed %d training samples, used %d seconds" % (count, time.time() - start_time  ) )
+      start_time = time.time()
+    for curPosTgtId in verifiedTgtIds:
+      # add current positive pair
+      source_inputs.append(source_tokens)
+      src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
+      tgt_inputs.append(encodedFullTargetSpace[curPosTgtId])
+      tgt_lens.append(encodedFullTargetSpace[curPosTgtId].index(text_encoder.PAD_ID) + 1)
+      labels.append(1.0)
+      # add negative pairs as the pair-wise anchor for current positive sample:
+      for _ in range(neg_samples):
+        negTgt = negSets[random.randint(0,negSetLen)]
+        source_inputs.append(source_tokens)
+        src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
+        tgt_inputs.append(encodedFullTargetSpace[negTgt])
+        tgt_lens.append(encodedFullTargetSpace[negTgt].index(text_encoder.PAD_ID) + 1)
+        labels.append(0.0)
+
+  mixedTrainCorpus = (source_inputs, src_lens, tgt_inputs, tgt_lens, labels)
+  return encoder, mixedTrainCorpus, evalCorpus, encodedFullTargetSpace, tgtIdNameMap
 
 
 
@@ -324,7 +285,7 @@ def load_encodedTargetSpace(processed_data_dir):
 def save_model_configs(processed_data_dir, configs):
   max_seq_length, max_gradient_norm, vocabsize, embedding_size, \
   encoding_size, src_cell_size,  tgt_cell_size, num_layers, \
-  learning_rate,  learning_rate_decay_factor, targetSpaceSize, network_mode, TOP_N = configs
+  learning_rate,  learning_rate_decay_factor, targetSpaceSize, network_mode, TOP_N, alpha, neg_samples = configs
   outfile = codecs.open( os.path.join(processed_data_dir,'modelConfig.param'), 'w', 'utf-8')
   outfile.write( 'max_seq_length=' + str(max_seq_length) + '\n')
   outfile.write( 'max_gradient_norm=' + str(max_gradient_norm) + '\n')
@@ -337,32 +298,44 @@ def save_model_configs(processed_data_dir, configs):
   outfile.write( 'learning_rate=' + str(learning_rate) + '\n')
   outfile.write( 'learning_rate_decay_factor=' + str(learning_rate_decay_factor) + '\n')
   outfile.write( 'targetSpaceSize=' + str(targetSpaceSize) + '\n')
-  outfile.write( 'network_mode=' + str(network_mode) + '\n')
-  outfile.write( 'TOP_N=' + str(TOP_N) + '\n')
+  outfile.write( 'network_mode=' + str(network_mode) + '\n' )
+  outfile.write( 'TOP_N=' + str(TOP_N) + '\n' )
+  outfile.write( 'alpha=' + str(alpha) + '\n' )
+  outfile.write( 'neg_samples=' + str(neg_samples) + '\n' )
   outfile.close()
   return
 
 
 def load_model_configs(processed_data_dir):
   modelConfig={}
-  for line in open(processed_data_dir + '/modelConfig.param', 'rt'):
+  for line in codecs.open(os.path.join(processed_data_dir, 'modelConfig.param'), 'r', 'utf-8').readlines():
     if '=' not in line.strip():
       continue
     key, value = line.strip().split('=')
     modelConfig[key]=value
   return modelConfig
 
+
 def getSortedResults(scores):
   rankedIdx = np.argsort( -scores )
   sortedScore = -np.sort( -scores, axis=1 )
-  print('Sample top5 scores:' , sortedScore[0:5])
+  #print('Sample top5 scores:' , sortedScore[0:5])
   return sortedScore, rankedIdx
 
-def computeTopK_accuracy( topk, labels, results ):
-  k = min(topk, results.shape[1])
-  nbrCorrect=0.0
-  for i in xrange(results.shape[0]):
-    if labels[i] in results[i][:k]:
-      nbrCorrect += 1.0
-  return nbrCorrect / float(results.shape[0])
 
+def computeTopK_accuracy( topk, labels, results ):
+  """
+  :param topk:
+  :param labels: two demensions. Each entry can have multiple correct labels
+  :param results:
+  :return:
+  """
+  k = min(topk, results.shape[1])
+  totalCorrect=0.0
+  for i in range(results.shape[0]):
+    curCorrect = 0.0
+    for correctLabel in labels[i]:
+      if correctLabel in results[i][:k]:
+        curCorrect += 1.0
+    totalCorrect += curCorrect / len(labels[i])
+  return totalCorrect / float(results.shape[0])

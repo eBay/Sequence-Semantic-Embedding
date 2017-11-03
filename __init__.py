@@ -33,5 +33,6 @@ from __future__ import unicode_literals
 import data_utils
 import sse_model
 import sse_evaluator
+import sse_index
 import tokenizer
 import text_encoder
