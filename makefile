@@ -1,5 +1,5 @@
 device=0
-lr=0.01
+lr=0.1
 alpha=1.0
 neg_samples=1
 

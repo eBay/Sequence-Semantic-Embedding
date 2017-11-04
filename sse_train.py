@@ -225,19 +225,19 @@ def train():
           checkpoint_path = os.path.join(FLAGS.model_dir, "SSE-LSTM.ckpt")
           acc_sum = tf.Summary(value=[tf.Summary.Value(tag="train_binary_acc", simple_value=train_acc)])
           sw.add_summary(acc_sum, current_step)
-          #########debugging##########
-          model.set_forward_only(True)
-          sse_index.createIndexFile(model, encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename),
-                                    FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess,
-                                    batchsize=1000)
-          evaluator = sse_evaluator.Evaluator(model, eval_corpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile),
-                                              sess)
-          acc1, acc3, acc10 = evaluator.eval()
-          print("epoc# %.3f, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f " % (float(model.global_step.eval())/ float(epoc_steps), acc1, acc3, acc10))
-          ###end of debugging########
+          # #########debugging##########
+          # model.set_forward_only(True)
+          # sse_index.createIndexFile(model, encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename),
+          #                           FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess,
+          #                           batchsize=1000)
+          # evaluator = sse_evaluator.Evaluator(model, eval_corpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile),
+          #                                     sess)
+          # acc1, acc3, acc10 = evaluator.eval()
+          # print("epoc# %.3f, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f " % (float(model.global_step.eval())/ float(epoc_steps), acc1, acc3, acc10))
+          # ###end of debugging########
 
-          # Decrease learning rate if no improvement was seen over last 4 times.
-          if len(previous_accuracies) > 3 and train_acc < min(previous_accuracies[-3:]):
+          # Decrease learning rate if no improvement was seen over last 3 times.
+          if len(previous_accuracies) > 3 and train_acc < min(previous_accuracies[-2:]):
             sess.run(model.learning_rate_decay_op)
           previous_accuracies.append(train_acc)
           # save currently best-ever model
@@ -249,7 +249,7 @@ def train():
             print("skip saving model ...")
           # if finished at least 2 Epocs and still no further accuracy improvement, stop training
           # report the best accuracy number and final model's number and save it.
-          if epoch > 10 and train_acc < min(previous_accuracies[-4:]):
+          if epoch > 10 and train_acc < min(previous_accuracies[-5:]):
             p = model.save(sess, checkpoint_path + "-final")
             print("After around %d Epocs no further improvement, Training finished, wrote checkpoint to %s." % (epoch, p) )
             break
