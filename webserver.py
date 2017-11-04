@@ -124,8 +124,8 @@ def classification():
     else:
       source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(app.modelConfigs['max_seq_length']) - src_len - 1)
     dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([src_len+1]))
-    sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
-    #sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
+    #sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
+    sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
     sourceEncodings = np.vstack(sourceEncodings)
     distances = np.dot(sourceEncodings, app.targetEncodings.T)
     rankedScore, rankedIdx = data_utils.getSortedResults(distances)

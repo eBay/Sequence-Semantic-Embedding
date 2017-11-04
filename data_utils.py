@@ -158,101 +158,60 @@ def gen_postive_corpus( pairfilename, encodedTargetSpace, encoder, max_seq_lengt
   return Corpus
 
 
-def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, neg_samples,  max_seq_length):
+def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, neg_samples, max_seq_length):
   """
   Get SSE training, and Evaluation related data, create tokenizer and vocabulary.
-  
-  :param raw_data_dir: 
-  :param processed_data_dir: 
-  :param vocabulary_size: 
+
+  :param raw_data_dir:
+  :param processed_data_dir:
+  :param vocabulary_size:
   :param neg_samples:
-  :param max_seq_length: 
-  :return: 
+  :param max_seq_length:
+  :return:
   """
   # unzip corpus to the specified processed directory.
   get_data_set(raw_data_dir, processed_data_dir)
 
   # generate vocab file if not available, otherwise, use supplied vocab file for encoder
   vocabFile = processed_data_dir + '/vocabulary.txt'
-  if  gfile.Exists( vocabFile ):
-    print("Loading supplied vocabluary file: %s" % vocabFile )
+  if gfile.Exists(vocabFile):
+    print("Loading supplied vocabluary file: %s" % vocabFile)
     encoder = text_encoder.SubwordTextEncoder(filename=vocabFile)
-    print("Total vocab size is: %d" % encoder.vocab_size )
+    print("Total vocab size is: %d" % encoder.vocab_size)
   else:
     print("No supplied vocabulary file found. Build new vocabulary based on training data ....")
-    token_counts = tokenizer.corpus_token_counts( processed_data_dir + '/*.Corpus', 1000000, split_on_newlines=True)
-    encoder = text_encoder.SubwordTextEncoder.build_to_target_size( vocabulary_size, token_counts, 2, 1000 )
+    token_counts = tokenizer.corpus_token_counts(processed_data_dir + '/*.Corpus', 1000000, split_on_newlines=True)
+    encoder = text_encoder.SubwordTextEncoder.build_to_target_size(vocabulary_size, token_counts, 2, 1000)
     encoder.store_to_file(vocabFile)
     print("New vocabulary constructed.")
 
-  #create encoded TargetSpace Data
+  # create encoded TargetSpace Data
   encodedFullTargetSpace = {}
   tgtIdNameMap = {}
-  encodedFullTargetFile = codecs.open( os.path.join(processed_data_dir, "encoded.FullTargetSpace"), 'w', 'utf-8')
-  for line in codecs.open( os.path.join(processed_data_dir, "targetIDs"), 'r', 'utf-8'):
+  encodedFullTargetFile = codecs.open(os.path.join(processed_data_dir, "encoded.FullTargetSpace"), 'w', 'utf-8')
+  for line in codecs.open(os.path.join(processed_data_dir, "targetIDs"), 'r', 'utf-8'):
     tgtSeq, id = line.strip().split('\t')
     token_ids = encoder.encode(tgtSeq.lower())
     seqlen = len(token_ids)
-    if seqlen > max_seq_length-1:
-      print( 'Error Detected!!! \n Target:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (tgtSeq, seqlen, max_seq_length ))
+    if seqlen > max_seq_length - 1:
+      print(
+        'Error Detected!!! \n Target:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
+        tgtSeq, seqlen, max_seq_length))
       continue
-    token_ids =  token_ids + [ text_encoder.EOS_ID ] + [ text_encoder.PAD_ID] * (max_seq_length - seqlen -1)
+    token_ids = token_ids + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_length - seqlen - 1)
     encodedFullTargetSpace[id] = token_ids
     tgtIdNameMap[id] = tgtSeq
-    encodedFullTargetFile.write(id + '\t' + tgtSeq.strip() + '\t' + ','.join([str(i) for i in token_ids]) + '\n'  )
+    encodedFullTargetFile.write(id + '\t' + tgtSeq.strip() + '\t' + ','.join([str(i) for i in token_ids]) + '\n')
   encodedFullTargetFile.close()
 
-  #creat positive Evaluation corpus: (source_tokens, verifiedTgtIds )
-  evalCorpus = gen_postive_corpus( os.path.join(processed_data_dir, "EvalPairs" ), encodedFullTargetSpace, encoder, max_seq_length)
-  #debugging purpose
-  # print("evalCorpus[1] is:\n source_tokens: %s \n tgtId: %s" % ( str(evalCorpus[1][0]), str(evalCorpus[1][1])  ) )
+  # creat positive Evaluation corpus: (source_tokens, verifiedTgtIds )
+  evalCorpus = gen_postive_corpus(os.path.join(processed_data_dir, "EvalPairs"), encodedFullTargetSpace, encoder,
+                                  max_seq_length)
 
-  #create positive Training Corpus: (source_tokens, verifiedTgtIds )
-  trainingPosCorpus = gen_postive_corpus(os.path.join(processed_data_dir, "TrainPairs" ), encodedFullTargetSpace, encoder, max_seq_length)
-
-  #create mixed binary Training Corpus: (source_tokens, src_len, tgt_tokesn, tgt_len, pos_neg_labels)
-  #every positive sample will followed by #neg_sample amount of negative samples
-  print("Generating training and evaluation corpus .... ")
-  random.shuffle(trainingPosCorpus)
-  fullSetTargetIds = list(encodedFullTargetSpace.keys())
-  fullSetLen = len(fullSetTargetIds)
-  fullSampleFlag = False
-  if fullSetLen > 10000:
-    fullSampleFlag = True
-  source_inputs, src_lens, tgt_inputs, tgt_lens, labels = [], [], [], [], []
-  count = 0
-  start_time = time.time()
-
-  for pos_entry in trainingPosCorpus:
-    source_tokens, verifiedTgtIds = pos_entry
-    count += 1
-    if fullSampleFlag:
-      negSets = fullSetTargetIds
-      negSetLen = fullSetLen - 1
-    else:
-      negSets = list(set(fullSetTargetIds) - set(verifiedTgtIds))
-      negSetLen = len(negSets) - 1
-    if count % 100000 == 0:
-      print("processed %d training samples, used %d seconds" % (count, time.time() - start_time  ) )
-      start_time = time.time()
-    for curPosTgtId in verifiedTgtIds:
-      # add current positive pair
-      source_inputs.append(source_tokens)
-      src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
-      tgt_inputs.append(encodedFullTargetSpace[curPosTgtId])
-      tgt_lens.append(encodedFullTargetSpace[curPosTgtId].index(text_encoder.PAD_ID) + 1)
-      labels.append(1.0)
-      # add negative pairs as the pair-wise anchor for current positive sample:
-      for _ in range(neg_samples):
-        negTgt = negSets[random.randint(0,negSetLen)]
-        source_inputs.append(source_tokens)
-        src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
-        tgt_inputs.append(encodedFullTargetSpace[negTgt])
-        tgt_lens.append(encodedFullTargetSpace[negTgt].index(text_encoder.PAD_ID) + 1)
-        labels.append(0.0)
-
-  mixedTrainCorpus = (source_inputs, src_lens, tgt_inputs, tgt_lens, labels)
-  return encoder, mixedTrainCorpus, evalCorpus, encodedFullTargetSpace, tgtIdNameMap
+  # create positive Training Corpus: (source_tokens, verifiedTgtIds )
+  trainCorpus = gen_postive_corpus(os.path.join(processed_data_dir, "TrainPairs"), encodedFullTargetSpace,
+                                         encoder, max_seq_length)
+  return encoder, trainCorpus, evalCorpus, encodedFullTargetSpace, tgtIdNameMap
 
 
 

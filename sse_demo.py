@@ -132,7 +132,7 @@ def demo():
 
       print('Top 5 Prediction results are:\n')
       for idx in range(5):
-        print( 'top%d:  %s , %f ,  %s ' % ( idx+1, top5_tgtIDs[idx], top5_confs[idx], top5_tgtNames[idx]) )
+        print( 'top%d:  %s , %f ,  %s ' % ( idx+1, top5_tgtIDs[idx],  top5_confs[idx], top5_tgtNames[idx]) )
       print("> ", end="")
 
       sys.stdout.flush()

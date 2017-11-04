@@ -340,8 +340,8 @@ class SSEModel(object):
   def _def_loss(self):
     # compute src / tgt similarity
     with tf.variable_scope('similarity'):
-      self.norm_src_seq_embedding = tf.nn.l2_normalize(self.src_seq_embedding, dim=-1)
-      self.norm_tgt_seq_embedding = tf.nn.l2_normalize(self.tgt_seq_embedding, dim=-1)
+      self.norm_src_seq_embedding =  tf.nn.l2_normalize(self.src_seq_embedding, dim=-1)
+      self.norm_tgt_seq_embedding =  tf.nn.l2_normalize(self.tgt_seq_embedding, dim=-1)
 
       # this similarity tensor is used for prediction, tensor shape is (src_batch_size * target_space_size )
       # self.similarity = tf.matmul( self.norm_src_seq_embedding, self.norm_tgt_seq_embedding, transpose_b=True)
@@ -353,7 +353,7 @@ class SSEModel(object):
 
       #self.binarylogit =  tf.reduce_sum( tf.multiply(self.norm_src_seq_embedding, self.norm_tgt_seq_embedding) , axis=-1 )
       self.binarylogit =  tf.reduce_sum( tf.multiply(self.src_seq_embedding, self.tgt_seq_embedding) , axis=-1 )
-      #self.binarylogit = tf.Print(self.binarylogit, [self.binarylogit], summarize=6, message='binarylogit')
+      # self.binarylogit = tf.Print(self.binarylogit, [self.binarylogit], summarize=6, message='binarylogit')
 
 
     with tf.variable_scope('training_loss'):
@@ -367,14 +367,16 @@ class SSEModel(object):
 
       #TODO: try logistic Binary cross entropy loss function later: tf.nn.sigmoid_cross_entropy_with_logits(logits, targets, name=None)
       # basic bianry logistic loss, treat pos and neg the same weight
-      #self.loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits( logits=self.binarylogit, labels= self._labels) )
+      self.loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits( logits=self.binarylogit, labels= self._labels) )
       # weighted loss, to treat pos/neg loss with different weight
-      self.loss = tf.reduce_mean( tf.nn.weighted_cross_entropy_with_logits( logits=  self.binarylogit, targets= self._labels, pos_weight= float(self.alpha) * float(self.neg_samples) ))
-      #self.loss = tf.Print(self.loss, [self.loss], summarize=6, message='loss')
-
+      # self.loss = tf.reduce_mean( tf.nn.weighted_cross_entropy_with_logits( logits=  self.binarylogit, targets= self._labels, pos_weight= float(self.alpha) * float(self.neg_samples) ))
+      # self.loss = tf.Print(self.loss, [self.loss], summarize=6, message='loss')
+      #self.loss = tf.reduce_mean(tf.multiply(self._labels, 1.0 - tf.sigmoid(self.binarylogit)))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.sigmoid(self.binarylogit) ))
 
       #compute the binary training accuracy
-      self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.pow(1.00003, self.binarylogit - 0.9))))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(tf.pow(1.00003, 0.05 - self.binarylogit))))
+      # self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.pow(1.00003, self.binarylogit - 0.9))))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(tf.pow(1.00003, 0.05 - self.binarylogit))))
+      self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.sigmoid(self.binarylogit) + 0.1) ))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(1.1 - tf.sigmoid(self.binarylogit))) )
+
       # self.train_acc = ( (1.0 + float(self.neg_samples)) * tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.pow(1.00003, self.binarylogit - 0.9)))) )  + ( (1.0 + float(self.neg_samples)) / float(self.neg_samples) ) * tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(tf.pow(1.00003, 0.05 - self.binarylogit))))
       # self.train_acc = self.train_acc / 2.0
 
@@ -403,12 +405,14 @@ class SSEModel(object):
 
     #optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
     optimizer = tf.train.AdagradOptimizer(self.learning_rate)
+
+    # current version
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), self.max_gradient_norm )
     self.train = optimizer.apply_gradients( list(zip(grads, tvars)), global_step=self.global_step)
 
-    # #TODO: try different optimizer to see if any improvements
-    # self.train = optimizer.minimize(self.loss, global_step=self.global_step, gate_gradients=optimizer.GATE_NONE) #default version?
+    #TODO: try different optimizer to see if any improvements
+    #self.train = optimizer.minimize(self.loss, global_step=self.global_step, gate_gradients=optimizer.GATE_NONE) #default version?
 
     self._add_post_train_ops()
 
