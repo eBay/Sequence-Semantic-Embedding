@@ -70,9 +70,8 @@ class Evaluator(object):
     """
 
     self.model = model
-    srcSeq_batch = [  entry[0]  for entry in  eval_corpus ]
-    srcLens_batch = [ entry.index(text_encoder.PAD_ID) +1   for entry in  srcSeq_batch ]
-    self.feed_dict = model.get_source_encoding_feed_dict(srcSeq_batch, srcLens_batch)
+    self.srcSeq_batch = [  entry[0]  for entry in  eval_corpus ]
+    self.srcLens_batch = [ entry.index(text_encoder.PAD_ID) +1   for entry in  self.srcSeq_batch ]
     self.session = session
 
     self.targetEncodings = []
@@ -100,17 +99,18 @@ class Evaluator(object):
     respective previous labels.
     Returns an array of top-n accuracies.
     """
+    acc = []
     self.model.set_forward_only(True)
-    sourceEncodings = self.session.run( [self.model.src_seq_embedding], feed_dict= self.feed_dict )
-    #sourceEncodings = self.session.run( [self.model.norm_src_seq_embedding], feed_dict= self.feed_dict )
-    sourceEncodings = np.vstack( sourceEncodings )
-    batchSize = 600
-    top1Acc, top3Acc, top10Acc = [], [], []
-    for batchId in range(math.ceil( len(sourceEncodings) / batchSize )):
-      batchSourceEncodings = sourceEncodings[batchId * batchSize: (batchId +1) * batchSize]
-      distances = np.dot( batchSourceEncodings, self.targetEncodings.T)
-      rankedScore, rankedIdx = data_utils.getSortedResults(distances)
-      top1Acc.append( data_utils.computeTopK_accuracy(1, self.eval_Labels, rankedIdx))
-      top3Acc.append( data_utils.computeTopK_accuracy(3, self.eval_Labels, rankedIdx))
-      top10Acc.append( data_utils.computeTopK_accuracy(10, self.eval_Labels, rankedIdx))
-    return [ np.mean(top1Acc), np.mean(top3Acc), np.mean(top10Acc) ]
+    for n in top_n:
+      batchSize = 600
+      batchacc = []
+      for batchId in range(math.ceil( len(self.srcSeq_batch) / batchSize )):
+        feed_dict = self.model.get_source_encoding_feed_dict(self.srcSeq_batch[batchId * batchSize: (batchId +1) * batchSize], self.srcLens_batch[batchId * batchSize: (batchId +1) * batchSize])
+        sourceEncodings = self.session.run([self.model.src_seq_embedding], feed_dict=feed_dict)
+        # sourceEncodings = self.session.run( [self.model.norm_src_seq_embedding], feed_dict= feed_dict )
+        sourceEncodings = np.vstack(sourceEncodings)
+        distances = np.dot( sourceEncodings, self.targetEncodings.T)
+        rankedScore, rankedIdx = data_utils.getSortedResults(distances)
+        batchacc.append( data_utils.computeTopK_accuracy(n, self.eval_Labels[batchId * batchSize: (batchId +1) * batchSize], rankedIdx))
+      acc.append(np.mean(batchacc))
+    return acc

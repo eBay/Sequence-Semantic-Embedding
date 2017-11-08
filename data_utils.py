@@ -289,6 +289,7 @@ def computeTopK_accuracy( topk, labels, results ):
   :param results:
   :return:
   """
+  assert len(labels) == len(results)
   k = min(topk, results.shape[1])
   totalCorrect=0.0
   for i in range(results.shape[0]):
