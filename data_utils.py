@@ -282,7 +282,7 @@ def getSortedResults(scores):
   return sortedScore, rankedIdx
 
 
-def computeTopK_accuracy( topk, labels, results ):
+def computeTopK_TightVersion_accuracy( topk, labels, results ):
   """
   :param topk:
   :param labels: two demensions. Each entry can have multiple correct labels
@@ -298,4 +298,22 @@ def computeTopK_accuracy( topk, labels, results ):
       if correctLabel in results[i][:k]:
         curCorrect += 1.0
     totalCorrect += curCorrect / len(labels[i])
+  return totalCorrect / float(results.shape[0])
+
+
+def computeTopK_accuracy( topk, labels, results ):
+  """
+  :param topk:
+  :param labels: two demensions. Each entry can have multiple correct labels
+  :param results:
+  :return:
+  """
+  assert len(labels) == len(results)
+  k = min(topk, results.shape[1])
+  totalCorrect=0.0
+  for i in range(results.shape[0]):
+    for correctLabel in labels[i]:
+      if correctLabel in results[i][:k]:
+        totalCorrect += 1.0
+        break
   return totalCorrect / float(results.shape[0])

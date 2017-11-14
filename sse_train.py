@@ -134,8 +134,54 @@ def set_up_logging(run_id):
   console_handler.setFormatter(formatter)
   root_logger.addHandler(console_handler)
 
+###################################################
+# # doing negative sampling using random choice
+###################################################
+# def buildMixedTrainBatch(trainPosCorpus, encodedFullTargetSpace, fullSetTargetIds, fullSetLen, neg_samples, negIdx ):
+#   """
+#
+#   :param trainPosCorpus:   (source_tokens, verifiedTgtIds )
+#   :param encodedTgtSpace:
+#   :param fullSetTargetIds:
+#   :param fullSetLen:
+#   :return: create mixed binary Training Corpus: (source_tokens, src_len, tgt_tokesn, tgt_len, pos_neg_labels)
+#           every positive sample will followed by #neg_sample amount of negative samples
+#   """
+#   source_inputs, src_lens, tgt_inputs, tgt_lens, labels = [], [], [], [], []
+#   for pos_entry in trainPosCorpus:
+#     source_tokens, verifiedTgtIds = pos_entry
+#     rawnegSets = fullSetTargetIds
+#     rawnegSetLen = fullSetLen - 1
+#     posSets = set(verifiedTgtIds)
+#     for curPosTgtId in verifiedTgtIds:
+#       # add current positive pair
+#       source_inputs.append(source_tokens)
+#       src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
+#       tgt_inputs.append(encodedFullTargetSpace[curPosTgtId])
+#       tgt_lens.append(encodedFullTargetSpace[curPosTgtId].index(text_encoder.PAD_ID) + 1)
+#       labels.append(1.0)
+#       choseNegSet = set()
+#       # add negative pairs as the pair-wise anchor for current positive sample:
+#       for _ in range(neg_samples):
+#         negTgt = rawnegSets[random.randint(0, rawnegSetLen)]
+#         while negTgt in (choseNegSet.union(posSets)):
+#           negTgt = rawnegSets[random.randint(0, rawnegSetLen)]
+#           if len(choseNegSet.union(posSets)) == fullSetLen:
+#             break
+#         choseNegSet.add(negTgt)
+#         source_inputs.append(source_tokens)
+#         src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
+#         tgt_inputs.append(encodedFullTargetSpace[negTgt])
+#         tgt_lens.append(encodedFullTargetSpace[negTgt].index(text_encoder.PAD_ID) + 1)
+#         labels.append(0.0)
+#   newNegIdx = negIdx % fullSetLen
+#   return source_inputs, src_lens, tgt_inputs, tgt_lens, labels, newNegIdx
 
-def buildMixedTrainBatch(trainPosCorpus, encodedFullTargetSpace, fullSetTargetIds, fullSetLen, neg_samples ):
+
+##################################################
+# doing negative sampling via round robin
+####################################################
+def buildMixedTrainBatch(trainPosCorpus, encodedFullTargetSpace, fullSetTargetIds, fullSetLen, neg_samples, negIdx ):
   """
 
   :param trainPosCorpus:   (source_tokens, verifiedTgtIds )
@@ -145,34 +191,31 @@ def buildMixedTrainBatch(trainPosCorpus, encodedFullTargetSpace, fullSetTargetId
   :return: create mixed binary Training Corpus: (source_tokens, src_len, tgt_tokesn, tgt_len, pos_neg_labels)
           every positive sample will followed by #neg_sample amount of negative samples
   """
+  negIdx = negIdx%fullSetLen
   source_inputs, src_lens, tgt_inputs, tgt_lens, labels = [], [], [], [], []
   for pos_entry in trainPosCorpus:
     source_tokens, verifiedTgtIds = pos_entry
-    rawnegSets = fullSetTargetIds
-    rawnegSetLen = fullSetLen - 1
-    posSets = set(verifiedTgtIds)
-    for curPosTgtId in verifiedTgtIds:
-      # add current positive pair
+    curPosTgtId = random.choice( verifiedTgtIds )
+    # add current positive pair
+    source_inputs.append(source_tokens)
+    src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
+    tgt_inputs.append(encodedFullTargetSpace[curPosTgtId])
+    tgt_lens.append(encodedFullTargetSpace[curPosTgtId].index(text_encoder.PAD_ID) + 1)
+    labels.append(1.0)
+    # add negative pairs as the pair-wise anchor for current positive sample:
+    for _ in range(neg_samples):
+      negTgt = fullSetTargetIds[negIdx]
+      while negTgt in verifiedTgtIds:
+        negIdx = (negIdx+1) % fullSetLen
+        negTgt = fullSetTargetIds[negIdx]
       source_inputs.append(source_tokens)
       src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
-      tgt_inputs.append(encodedFullTargetSpace[curPosTgtId])
-      tgt_lens.append(encodedFullTargetSpace[curPosTgtId].index(text_encoder.PAD_ID) + 1)
-      labels.append(1.0)
-      choseNegSet = set()
-      # add negative pairs as the pair-wise anchor for current positive sample:
-      for _ in range(neg_samples):
-        negTgt = rawnegSets[random.randint(0, rawnegSetLen)]
-        while negTgt in (choseNegSet.union(posSets)):
-          negTgt = rawnegSets[random.randint(0, rawnegSetLen)]
-          if len(choseNegSet.union(posSets)) == fullSetLen:
-            break
-        choseNegSet.add(negTgt)
-        source_inputs.append(source_tokens)
-        src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
-        tgt_inputs.append(encodedFullTargetSpace[negTgt])
-        tgt_lens.append(encodedFullTargetSpace[negTgt].index(text_encoder.PAD_ID) + 1)
-        labels.append(0.0)
-  return source_inputs, src_lens, tgt_inputs, tgt_lens, labels
+      tgt_inputs.append(encodedFullTargetSpace[negTgt])
+      tgt_lens.append(encodedFullTargetSpace[negTgt].index(text_encoder.PAD_ID) + 1)
+      labels.append(0.0)
+      negIdx = (negIdx+1) % fullSetLen
+  return source_inputs, src_lens, tgt_inputs, tgt_lens, labels, negIdx % fullSetLen
+
 
 def train():
   # Prepare data.
@@ -201,13 +244,14 @@ def train():
     previous_accuracies = []
     fullSetTargetIds = list(encodedTgtSpace.keys())
     fullSetLen = len(fullSetTargetIds)
+    negIdx = random.randint(0, fullSetLen - 1)
     for epoch in range( FLAGS.max_epoc ):
       epoc_start_Time = time.time()
       random.shuffle(train_corpus)
-      for batchId in range( math.floor(epoc_steps * 0.8) ): #basic drop out here
+      for batchId in range( math.floor(epoc_steps * 0.95) ): #basic drop out here
         start_time = time.time()
-        source_inputs, src_lens, tgt_inputs, tgt_lens, labels = \
-          buildMixedTrainBatch( train_corpus[batchId*FLAGS.batch_size:(batchId+1)*FLAGS.batch_size], encodedTgtSpace,fullSetTargetIds, fullSetLen,FLAGS.neg_samples)
+        source_inputs, src_lens, tgt_inputs, tgt_lens, labels, negIdx = \
+          buildMixedTrainBatch( train_corpus[batchId*FLAGS.batch_size:(batchId+1)*FLAGS.batch_size], encodedTgtSpace,fullSetTargetIds, fullSetLen,FLAGS.neg_samples, negIdx)
         model.set_forward_only(False)
         d = model.get_train_feed_dict(source_inputs, tgt_inputs, labels, src_lens, tgt_lens)
         ops = [model.train, summary_op, model.loss, model.train_acc ]
@@ -226,16 +270,16 @@ def train():
           acc_sum = tf.Summary(value=[tf.Summary.Value(tag="train_binary_acc", simple_value=train_acc)])
           sw.add_summary(acc_sum, current_step)
 
-          #########debugging##########
-          model.set_forward_only(True)
-          sse_index.createIndexFile(model, encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename),
-                                    FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess,
-                                    batchsize=1000)
-          evaluator = sse_evaluator.Evaluator(model, eval_corpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile),
-                                              sess)
-          acc1, acc3, acc10 = evaluator.eval()
-          print("epoc# %.3f, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f " % (float(model.global_step.eval())/ float(epoc_steps), acc1, acc3, acc10))
-          ###end of debugging########
+          # #########debugging##########
+          # model.set_forward_only(True)
+          # sse_index.createIndexFile(model, encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename),
+          #                           FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess,
+          #                           batchsize=1000)
+          # evaluator = sse_evaluator.Evaluator(model, eval_corpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile),
+          #                                     sess)
+          # acc1, acc3, acc10 = evaluator.eval()
+          # print("epoc# %.3f, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f " % (float(model.global_step.eval())/ float(epoc_steps), acc1, acc3, acc10))
+          # ###end of debugging########
 
           # Decrease learning rate if no improvement was seen over last 3 times.
           if len(previous_accuracies) > 3 and train_acc < min(previous_accuracies[-2:]):
@@ -260,13 +304,13 @@ def train():
 
 
       epoc_train_time = time.time() - epoc_start_Time
-      print('epoch# %d  took %f hours' % ( epoch , epoc_train_time / (60.0 * 60) ) )
+      print('\n\n\nepoch# %d  took %f hours' % ( epoch , epoc_train_time / (60.0 * 60) ) )
       # run task specific evaluation afer each epoch
       model.set_forward_only(True)
       sse_index.createIndexFile( model, encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename), FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess, batchsize=1000 )
       evaluator = sse_evaluator.Evaluator(model, eval_corpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile) , sess)
       acc1, acc3, acc10 = evaluator.eval()
-      print("epoc#%d, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f " % (epoch, acc1, acc3, acc10) )
+      print("epoc#%d, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f \n\n\n" % (epoch, acc1, acc3, acc10) )
       # Save checkpoint at end of each epoch
       checkpoint_path = os.path.join(FLAGS.model_dir, "SSE-LSTM.ckpt")
       model.save(sess, checkpoint_path + '-epoch-%d'%epoch)

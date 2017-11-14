@@ -62,6 +62,7 @@ def createIndexFile( model, encoder, rawfile, max_seq_len, encodeIndexFile, sess
   outFile = codecs.open(encodeIndexFile, 'w', 'utf-8')
   rawdata = codecs.open(rawfile, 'r', 'utf-8').readlines()
   cnt = 0
+  print("Start indexing whole target space entries with current model ...")
   for batchId in range(math.ceil(len(rawdata) / batchsize)):
     tgtInputs, tgtLens, tgtIds, tgtSentences = [], [], [], []
     for line in rawdata[batchId * batchsize:(batchId + 1) * batchsize]:
@@ -75,7 +76,7 @@ def createIndexFile( model, encoder, rawfile, max_seq_len, encodeIndexFile, sess
       tgt_tokens = encoder.encode(tgtSentence.lower())
       tgtlen = len(tgt_tokens)
       if tgtlen > max_seq_len - 1:
-        print('Current raw tgt file line exceed max number of supported keywords(%d): %s!!!' % (max_seq_len, line))
+        #print('Current raw tgt file line exceed max number of supported keywords(%d): %s!!!' % (max_seq_len, line))
         continue
       tgt_tokens = tgt_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_len - tgtlen - 1)
       tgtInputs.append(tgt_tokens)
@@ -89,7 +90,7 @@ def createIndexFile( model, encoder, rawfile, max_seq_len, encodeIndexFile, sess
     for idx in range(len(tgtSentences)):
       outFile.write(
         tgtIds[idx] + '\t' + tgtSentences[idx] + '\t' + ','.join([str(n) for n in targetsEncodings[idx]]) + '\n')
-    print("Done of indexing batch#:%d, total count:%d" % (batchId, cnt))
+  print("Done of all indexing total count:%d" % cnt)
   outFile.close()
 
 

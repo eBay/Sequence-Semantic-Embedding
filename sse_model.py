@@ -367,9 +367,9 @@ class SSEModel(object):
 
       #TODO: try logistic Binary cross entropy loss function later: tf.nn.sigmoid_cross_entropy_with_logits(logits, targets, name=None)
       # basic bianry logistic loss, treat pos and neg the same weight
-      self.loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits( logits=self.binarylogit, labels= self._labels) )
+      #self.loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits( logits=self.binarylogit, labels= self._labels) )
       # weighted loss, to treat pos/neg loss with different weight
-      # self.loss = tf.reduce_mean( tf.nn.weighted_cross_entropy_with_logits( logits=  self.binarylogit, targets= self._labels, pos_weight= float(self.alpha) * float(self.neg_samples) ))
+      self.loss = tf.reduce_mean( tf.nn.weighted_cross_entropy_with_logits( logits=  self.binarylogit, targets= self._labels, pos_weight= float(self.alpha) * float(self.neg_samples) ))
       # self.loss = tf.Print(self.loss, [self.loss], summarize=6, message='loss')
       #self.loss = tf.reduce_mean(tf.multiply(self._labels, 1.0 - tf.sigmoid(self.binarylogit)))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.sigmoid(self.binarylogit) ))
 
