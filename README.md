@@ -2,11 +2,11 @@
 
 SSE(Sequence Semantic Embedding) is an encoder framework toolkit for natural language processing related tasks and it's implemented in TensorFlow by leveraging TF's convenient deep learning blocks like DNN/CNN/LSTM etc. 
 
-SSE model translates a sequence of symbols into a vector of numeric numbers, so that different sequences with similar semantic meanings will have closer numeric vector distances. This numeric number vector is called the SSE for the original sequence of symbols. SSE can be applied to some large scale NLP related machine learning tasks. For example:
-* **Text classification task**: e.g., mapping a listing title or search query to one or multiples of the 20,000+ leaf categories in eBay website.
-* **Search engine relevance ranking task**: e.g., mapping a search query to some most relevant documents in the inventory.
-* **Question answering task**: e.g.,  mapping a question to its most suitable answers.
-* **Cross lingual information retrieval task**: e.g., mapping a Chinese/English/Mixed-Language search query to its most relevant English documents in inventory without translating Chinese to English.
+SSE model translates a sequence of symbols into a vector of numbers, so that different sequences with similar semantic meanings will have closer vector distances. This numeric vector is called the SSE for the original sequence of symbols. SSE can be applied to some large scale NLP related machine learning tasks. For example:
+* **Text classification task**: e.g., mapping an eBay listing title or eBay search query to one or multiples of the 20,000+ leaf categories in eBay website.
+* **Search engine relevance ranking task**: e.g., mapping a search query to some most relevant documents in eBay inventory.
+* **Question answering task**: e.g.,  mapping a question to its most suitable answers from a set of FAQ document.
+* **Cross lingual information retrieval task**: e.g., mapping a Chinese/English/English-Chinese-Mixed search query to its most relevant eBay inventory listing without the need of calling machine translation.
 
 Depending on each specific task, similar semantic meanings can have different definitions. For example, in the category classification task, similar semantic meanings means that for each correct pair of (listing-title, category), the SSE of listing-title is close to the SSE of corresponding category.  While in the information retrieval task, similar semantic meaning means for each relevant pair of (query, document), the SSE of query is close to the SSE of relevant document. While in the question answering task, the SSE of question is close to the SSE of correct answers.
 

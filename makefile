@@ -4,7 +4,7 @@ alpha=1.0
 neg_samples=1
 
 train-classification:
-	python sse_train.py --task_type=classification --data_dir=rawdata-classification --model_dir=models-classification  --device=$(device) --learning_rate=$(lr) --alpha=$(alpha) --neg_samples=$(neg_samples) --max_epoc=10 --steps_per_checkpoint=200
+	python sse_train.py --task_type=classification --data_dir=rawdata-classification --model_dir=models-classification  --device=$(device) --learning_rate=$(lr) --alpha=$(alpha) --neg_samples=$(neg_samples) --max_epoc=50 --steps_per_checkpoint=200
 
 index-classification:
 	python sse_index.py  --idx_model_dir=models-classification --idx_rawfilename=targetIDs  --idx_encodedIndexFile=targetEncodingIndex.tsv
@@ -22,7 +22,7 @@ index-qna:
 	python sse_index.py  --idx_model_dir=models-qna --idx_rawfilename=targetIDs --idx_encodedIndexFile=targetEncodingIndex.tsv
 
 train-ranking:
-	python sse_train.py --task_type=ranking --data_dir=rawdata-ranking --model_dir=models-ranking  --device=$(device) --learning_rate=$(lr) --alpha=$(alpha) --embedding_size=30 --encoding_size=50 --max_seq_length=50  --batch_size=64 --max_epoc=10 --steps_per_checkpoint=100  --neg_samples=$(neg_samples)
+	python sse_train.py --task_type=ranking --data_dir=rawdata-ranking --model_dir=models-ranking  --device=$(device) --learning_rate=$(lr) --alpha=$(alpha) --embedding_size=30 --encoding_size=50 --max_seq_length=50  --batch_size=128 --max_epoc=100 --steps_per_checkpoint=200  --neg_samples=$(neg_samples)
 
 index-ranking:
 	python sse_index.py  --idx_model_dir=models-ranking --idx_rawfilename=targetIDs --idx_encodedIndexFile=targetEncodingIndex.tsv
