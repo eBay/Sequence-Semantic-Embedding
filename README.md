@@ -1,6 +1,6 @@
 # Sequence-Semantic-Embedding
 
-SSE(Sequence Semantic Embedding) is an encoder framework toolkit for natural language processing related tasks and it's implemented in TensorFlow by leveraging TF's convenient deep learning blocks like DNN/CNN/LSTM etc. 
+SSE(Sequence Semantic Embedding) is an encoder framework toolkit for natural language processing related tasks. It's implemented in TensorFlow by leveraging TF's convenient deep learning blocks like DNN/CNN/LSTM etc.
 
 SSE model translates a sequence of symbols into a vector of numbers, so that different sequences with similar semantic meanings will have closer vector distances. This numeric vector is called the SSE for the original sequence of symbols. SSE can be applied to some large scale NLP related machine learning tasks. For example:
 * **Text classification task**: e.g., mapping an eBay listing title or eBay search query to one or multiples of the 20,000+ leaf categories in eBay website.

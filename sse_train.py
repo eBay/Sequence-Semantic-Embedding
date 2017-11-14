@@ -305,12 +305,14 @@ def train():
 
       epoc_train_time = time.time() - epoc_start_Time
       print('\n\n\nepoch# %d  took %f hours' % ( epoch , epoc_train_time / (60.0 * 60) ) )
+
       # run task specific evaluation afer each epoch
-      model.set_forward_only(True)
-      sse_index.createIndexFile( model, encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename), FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess, batchsize=1000 )
-      evaluator = sse_evaluator.Evaluator(model, eval_corpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile) , sess)
-      acc1, acc3, acc10 = evaluator.eval()
-      print("epoc#%d, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f \n\n\n" % (epoch, acc1, acc3, acc10) )
+      if (FLAGS.task_type not in ['ranking', 'crosslingual']) or (epoch % 10) == 0:
+        model.set_forward_only(True)
+        sse_index.createIndexFile( model, encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename), FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess, batchsize=1000 )
+        evaluator = sse_evaluator.Evaluator(model, eval_corpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile) , sess)
+        acc1, acc3, acc10 = evaluator.eval()
+        print("epoc#%d, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f \n\n\n" % (epoch, acc1, acc3, acc10) )
       # Save checkpoint at end of each epoch
       checkpoint_path = os.path.join(FLAGS.model_dir, "SSE-LSTM.ckpt")
       model.save(sess, checkpoint_path + '-epoch-%d'%epoch)

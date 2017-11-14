@@ -398,22 +398,16 @@ class SSEModel(object):
       #
       # self.predictResults = self.similarity
 
+
   def _def_optimize(self):
     """
     Builds graph to minimize loss function.
     """
-
-    #optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
     optimizer = tf.train.AdagradOptimizer(self.learning_rate)
 
-    # current version
     tvars = tf.trainable_variables()
     grads, _ = tf.clip_by_global_norm(tf.gradients(self.loss, tvars), self.max_gradient_norm )
     self.train = optimizer.apply_gradients( list(zip(grads, tvars)), global_step=self.global_step)
-
-    #TODO: try different optimizer to see if any improvements
-    #self.train = optimizer.minimize(self.loss, global_step=self.global_step, gate_gradients=optimizer.GATE_NONE) #default version?
-
     self._add_post_train_ops()
 
 
