@@ -127,7 +127,7 @@ class SSEModel(object):
     self.tgt_cell_size = tgt_cell_size
     self.num_layers = num_layers
     self.learning_rate = tf.Variable(float(learning_rate), name='learning_rate', trainable=False)
-    self.learning_rate_decay_op = self.learning_rate.assign(self.learning_rate * learning_rate_decay_factor)
+    self.learning_rate_decay_op = self.learning_rate.assign( tf.maximum( self.learning_rate * learning_rate_decay_factor, 1e-3) )
     self.global_step = tf.Variable(0, name="global_step", trainable=False)
     self.targetSpaceSize = targetSpaceSize
     self.alpha = alpha
@@ -344,7 +344,7 @@ class SSEModel(object):
       self.norm_tgt_seq_embedding =  tf.nn.l2_normalize(self.tgt_seq_embedding, dim=-1)
 
       # this similarity tensor is used for prediction, tensor shape is (src_batch_size * target_space_size )
-      # self.similarity = tf.matmul( self.norm_src_seq_embedding, self.norm_tgt_seq_embedding, transpose_b=True)
+      #self.similarity = tf.matmul( self.norm_src_seq_embedding, self.norm_tgt_seq_embedding, transpose_b=True)
       self.similarity = tf.matmul( self.src_seq_embedding, self.tgt_seq_embedding, transpose_b=True)
       #self.similarity = tf.Print(self.similarity, [self.similarity], summarize=571, message='similarity')
 
@@ -353,18 +353,10 @@ class SSEModel(object):
 
       #self.binarylogit =  tf.reduce_sum( tf.multiply(self.norm_src_seq_embedding, self.norm_tgt_seq_embedding) , axis=-1 )
       self.binarylogit =  tf.reduce_sum( tf.multiply(self.src_seq_embedding, self.tgt_seq_embedding) , axis=-1 )
-      # self.binarylogit = tf.Print(self.binarylogit, [self.binarylogit], summarize=6, message='binarylogit')
+      #self.binarylogit = tf.Print(self.binarylogit, [self.binarylogit], summarize=6, message='binarylogit')
 
 
     with tf.variable_scope('training_loss'):
-      # # doing sampled softmax loss at here:
-      # bias = tf.get_variable('loss_bias', shape=[self.targetSpaceSize], initializer=tf.truncated_normal_initializer() )
-      # self.loss = tf.reduce_mean( tf.nn.sampled_softmax_loss( self.tgt_seq_embedding, bias, self.src_seq_embedding, \
-      #         tf.expand_dims( self._labels, 1 ), self.neg_sample_size, self.targetSpaceSize) )
-
-      #doing full target space softmax loss at here
-      # self.loss = tf.reduce_mean( tf.nn.sparse_softmax_cross_entropy_with_logits( logits= self.similarity, labels= self._labels) )
-
       #TODO: try logistic Binary cross entropy loss function later: tf.nn.sigmoid_cross_entropy_with_logits(logits, targets, name=None)
       # basic bianry logistic loss, treat pos and neg the same weight
       #self.loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits( logits=self.binarylogit, labels= self._labels) )
@@ -374,11 +366,39 @@ class SSEModel(object):
       #self.loss = tf.reduce_mean(tf.multiply(self._labels, 1.0 - tf.sigmoid(self.binarylogit)))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.sigmoid(self.binarylogit) ))
 
       #compute the binary training accuracy
-      # self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.pow(1.00003, self.binarylogit - 0.9))))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(tf.pow(1.00003, 0.05 - self.binarylogit))))
-      self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.sigmoid(self.binarylogit) + 0.1) ))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(1.1 - tf.sigmoid(self.binarylogit))) )
+      self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.sigmoid(self.binarylogit) + 0.1) ))   +  tf.reduce_mean(tf.multiply(1.0 - self._labels, tf.floor(1.1 - tf.sigmoid(self.binarylogit))) )
 
-      # self.train_acc = ( (1.0 + float(self.neg_samples)) * tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.pow(1.00003, self.binarylogit - 0.9)))) )  + ( (1.0 + float(self.neg_samples)) / float(self.neg_samples) ) * tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(tf.pow(1.00003, 0.05 - self.binarylogit))))
-      # self.train_acc = self.train_acc / 2.0
+    ########## Testing with Siamese loss with margin ############
+    # with tf.variable_scope('training_loss'):
+    #   # siamese loss with margin
+    #   margin = 0.25
+    #   # Calculate the positive losses
+    #   pos_loss_term = 0.25 * tf.square(tf.subtract(1., self.binarylogit))
+    #   pos_mult = tf.cast(self._labels, tf.float32)
+    #   positive_loss = tf.multiply(pos_mult, pos_loss_term)
+    #   # Calculate negative losses, then make sure on dissimilar strings
+    #   neg_mult = tf.subtract(1., tf.cast(self._labels, tf.float32))
+    #   negative_loss = neg_mult * tf.square(self.binarylogit)
+    #   # Combine positive and negative losses
+    #   loss = tf.add(positive_loss, negative_loss)
+    #   # Create the margin term.  This is when the targets are 0.,
+    #   #  and the scores are less than m, return 0.
+    #   # Check if target is zero (dissimilar strings)
+    #   target_zero = tf.equal(tf.cast(self._labels, tf.float32), 0.)
+    #   # Check if cosine outputs is smaller than margin
+    #   less_than_margin = tf.less(self.binarylogit, margin)
+    #   # Check if both are true
+    #   both_logical = tf.logical_and(target_zero, less_than_margin)
+    #   both_logical = tf.cast(both_logical, tf.float32)
+    #   # If both are true, then multiply by (1-1)=0.
+    #   multiplicative_factor = tf.cast(1. - both_logical, tf.float32)
+    #   total_loss = tf.multiply(loss, multiplicative_factor)
+    #   # Average loss over batch
+    #   self.loss = tf.reduce_mean(total_loss)
+    #   #compute the binary training accuracy
+    #   self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.sigmoid(self.binarylogit) + 0.2) ))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.floor(1.2 - tf.sigmoid(self.binarylogit))) )
+
+
 
   def set_top_n(self, top_n):
     self.TOP_N = top_n
@@ -386,6 +406,7 @@ class SSEModel(object):
 
   def set_forward_only(self, forward_only=True):
     self.forward_only = forward_only
+
 
   def _def_predict(self):
     # Prediction cannot return more candidates than there are categories
@@ -395,7 +416,6 @@ class SSEModel(object):
       #normalize conf score
       self.predicted_tgts_score = tf.nn.l2_normalize(self.predicted_tgts_score, 1)
       #self.predicted_tgts_score, self.predicted_labels = tf.nn.top_k(self.norm_similarity, self.TOP_N, sorted=True)
-      #
       # self.predictResults = self.similarity
 
 

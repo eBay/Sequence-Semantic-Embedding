@@ -22,7 +22,7 @@ index-qna:
 	python sse_index.py  --idx_model_dir=models-qna --idx_rawfilename=targetIDs --idx_encodedIndexFile=targetEncodingIndex.tsv
 
 train-ranking:
-	python sse_train.py --task_type=ranking --data_dir=rawdata-ranking --model_dir=models-ranking  --device=$(device) --learning_rate=$(lr) --alpha=$(alpha) --embedding_size=30 --encoding_size=50 --max_seq_length=50  --batch_size=32 --max_epoc=100 --steps_per_checkpoint=200  --neg_samples=$(neg_samples)
+	python sse_train.py --task_type=ranking --data_dir=rawdata-ranking --model_dir=models-ranking  --device=$(device) --learning_rate=$(lr) --alpha=$(alpha) --embedding_size=30 --encoding_size=50 --max_seq_length=50  --batch_size=32 --max_epoc=150 --steps_per_checkpoint=200  --neg_samples=$(neg_samples)
 
 index-ranking:
 	python sse_index.py  --idx_model_dir=models-ranking --idx_rawfilename=targetIDs --idx_encodedIndexFile=targetEncodingIndex.tsv

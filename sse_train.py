@@ -307,7 +307,7 @@ def train():
       print('\n\n\nepoch# %d  took %f hours' % ( epoch , epoc_train_time / (60.0 * 60) ) )
 
       # run task specific evaluation afer each epoch
-      if (FLAGS.task_type not in ['ranking', 'crosslingual']) or (epoch % 10) == 0:
+      if (FLAGS.task_type not in ['ranking', 'crosslingual']) or ( (epoch+1) % 20) == 0:
         model.set_forward_only(True)
         sse_index.createIndexFile( model, encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename), FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess, batchsize=1000 )
         evaluator = sse_evaluator.Evaluator(model, eval_corpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile) , sess)
