@@ -115,10 +115,27 @@ This repo contains some sample raw datasets for four types of NLP task in below 
   air jordan 12 gs dynamic pink	Item#876583|Item#439598|Item#563089|Item#709305|Item#460164|Item#45300|Item#791751|Item#523586|Item#275794|Item#516742|Item#444557|Item#700634|Item#860517|Item#775042|Item#731907|Item#852612|Item#877692|Item#453434|Item#582210|Item#200407|Item#196434
   ```
 
-* **rawdata-crosslingual**: (To be added very soon.) 
+* **rawdata-crosslingual**: 
 
-  This cross lingual information retrieval sample data contains nearly 1 million product titles in English and 50K Chinese/English/Chinese-English-Mixed search queries about Clothes, Shoes and Accessariese in eCommerce domain. The source sequence data is user search query, and the target sequence data is a list of relevant listing titles corresponding to the given query. The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains nearly 1 million listing titles and listing_ID, seperated by tab. The format of TrainPair/EvalPair is source_sequence(search query) and list of relevant listing ids.
+  This initial released cross lingual information retrieval sample dataset contains nearly 19K product titles in English and 16.5K Chinese/English/Chinese-English-Mixed search queries about Clothes, Shoes and Accessariese in eCommerce domain. The source sequence data is user search query, and the target sequence data is a list of relevant listing titles corresponding to the given query. The unziped DataSet.tar.gz contains three text files named as TrainPairs, EvalPairs and targetIDs. The targetIDs file contains nearly 19K English listing titles and listing_ID, seperated by tab. The format of TrainPair/EvalPair is source_sequence(search query) and list of relevant listing ids. 
   
+  A larger set of cross lingual information retrieval sample dataset will be released in near future. Please stay tuned.
+
+  A few example lines in targetIDs file:
+  ```
+  fashion retro british style ankle boot autumn young men's motorcycle martin boot	272925135276
+  men's new balance nb ww847 sneakers athletic shoes size sz us13 us 13 black	253234434750
+  womens white pink runway style tshirt viva coco cuba print 2017 celebstyle	282402455930
+  new ballet dance yoga gymnastics canvas slipper shoes	121650244307
+  ```
+
+  A few example lines in TrainPair file:
+  ```
+  英伦风马丁靴	272925135276|253235556652|202115504586
+  nb 男鞋	253234434750|263286843065|272906918403|352206006036|282713345418|232543899635
+  coco t恤	282402455930|172847234178|222245444217
+  white dance shoes	121650244307|372062893666|252088843333
+  ```
   
 ### Train Model
 
@@ -258,7 +275,7 @@ export INDEX_FILE=targetEncodingIndex.tsv
 python -m flask run --port 5000 --host=0.0.0.0
 ```
 
-Once the webserver starts, you can just open a web browser and put a GET request like below to see your question answering web service result:
+Once the webserver starts, you can just open a web browser and put a GET request like below to see your search ranking web service result:
 
 ```
 http://<your-ip-address>:5000/api/search?query=red nike shoes&?nbest=10
@@ -269,7 +286,28 @@ The webserver will return a json object with a list of top 10 (default) most rel
 
 ### Cross-lingual Information Retrieval
 
-To be added very soon.
+The mission of cross lingual information retrieval task is to provide most relevant documents for a given search query(in various or mixed languages) from a vast amount of documents. The provided sample dataset allows user find relevant eBay items about Clothes, Shoes and Accessariese using query in English or Chinese or English-Chinese mixed without machine translation.
+
+If you want to build your own cross-lingual information retrieval webservice with your own domain dataset from scratch,  you can simply replace the zip file in rawdata-crosslingual folder with your own data and keep the same data format specified in [Training Data](#training-data) section. And then issue below commands to train out your own model, build the index, run the demo app and setup the webservice:
+
+
+```bash
+make train-crosslingual
+make index-crosslingual
+make demo-crosslingual
+export FLASK_APP=webserver.py
+export MODEL_TYPE=crosslingual
+export INDEX_FILE=targetEncodingIndex.tsv
+python -m flask run --port 5000 --host=0.0.0.0
+```
+
+Once the webserver starts, you can just open a web browser and put a GET request like below to see your crosslingual IR web service result:
+
+```
+http://<your-ip-address>:5000/api/crosslingual?query=jeep夹克&?nbest=10
+```
+
+The webserver will return a json object with a list of top 10 (default) most relevant item with listing_title, Item_ID,  and matching scores.
 
 ## References
 

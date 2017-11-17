@@ -22,7 +22,7 @@ index-qna:
 	python sse_index.py  --idx_model_dir=models-qna --idx_rawfilename=targetIDs --idx_encodedIndexFile=targetEncodingIndex.tsv
 
 train-ranking:
-	python sse_train.py --task_type=ranking --data_dir=rawdata-ranking --model_dir=models-ranking  --device=$(device) --learning_rate=$(lr) --alpha=$(alpha) --embedding_size=30 --encoding_size=50 --max_seq_length=50  --batch_size=32 --max_epoc=150 --steps_per_checkpoint=200  --neg_samples=$(neg_samples)
+	python sse_train.py --task_type=ranking --data_dir=rawdata-ranking --model_dir=models-ranking  --device=$(device) --learning_rate=$(lr) --alpha=$(alpha) --embedding_size=30 --encoding_size=50 --max_seq_length=50  --batch_size=32 --max_epoc=200 --steps_per_checkpoint=200  --neg_samples=$(neg_samples)
 
 index-ranking:
 	python sse_index.py  --idx_model_dir=models-ranking --idx_rawfilename=targetIDs --idx_encodedIndexFile=targetEncodingIndex.tsv
@@ -31,13 +31,14 @@ demo-ranking:
 	python sse_demo.py   --model_dir=models-ranking --indexFile=targetEncodingIndex.tsv
 
 train-crosslingual:
-	echo "Cross-Lingual information retrieval task will be supported very soon."
+	python sse_train.py --task_type=crosslingual --data_dir=rawdata-crosslingual --model_dir=models-crosslingual  --device=$(device) --learning_rate=$(lr) --alpha=$(alpha) --embedding_size=40 --encoding_size=50 --max_seq_length=50  --batch_size=32 --max_epoc=800 --steps_per_checkpoint=200  --neg_samples=$(neg_samples)
 
-demo-crosslingual:
-	echo "Cross-Lingual information retrieval task will be supported very soon."
 
 index-crosslingual:
-	echo "Cross-Lingual information retrieval task will be supported very soon."
+	python sse_index.py  --idx_model_dir=models-crosslingual --idx_rawfilename=targetIDs --idx_encodedIndexFile=targetEncodingIndex.tsv
+
+demo-crosslingual:
+	python sse_demo.py   --model_dir=models-crosslingual --indexFile=targetEncodingIndex.tsv
 
 
 clean:
