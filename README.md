@@ -32,10 +32,9 @@ python -m flask run --port 5000 --host=0.0.0.0
 Once webserver has started, you can open a browse and send a GET request like: http://<your-ip-address>:5000/api/crosslingual?query=运动裤&?nbest=10
 
 A zoomed out sample learned SSE for Chinese/English/Chinse-English-Mixed queries are shown as below. 
+    ![Cross-Lingual SSE Representation Examples](images/SSE-CrossLingual-ZoomedOut.png)
 
-<a href="url"><img src="https://github.com/eBay/Sequence-Semantic-Embedding/blob/master/images/SSE-CrossLingual-ZoomedOut.png" align="left" height="300" width="200" ></a>
-
-In the plot, Chinese/English/Chinese-English-Mixed queries that have similar semantic meanings are placed close to each other. This means  the models are converged to a good state. A much larger detailed SSE visualization version is [here](images/SSE-CrossLingual-Visualization.png)
+In the plot, Chinese/English/Chinese-English-Mixed queries that have similar semantic meanings are placed close to each other. This means  the models are converged to a good state. A larger detailed SSE visualization version is [here](images/SSE-CrossLingual-Visualization.png)
    
 See the [Content](#content) below for more details on how SSE training works, and how to use it to build the complete solution for your own NLP task with your own dataset.
 
