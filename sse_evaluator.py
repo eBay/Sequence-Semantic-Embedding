@@ -111,6 +111,6 @@ class Evaluator(object):
         sourceEncodings = np.vstack(sourceEncodings)
         distances = np.dot( sourceEncodings, self.targetEncodings.T)
         rankedScore, rankedIdx = data_utils.getSortedResults(distances)
-        batchacc.append( data_utils.computeTopK_accuracy(n, self.eval_Labels[batchId * batchSize: (batchId +1) * batchSize], rankedIdx))
+        batchacc.append( data_utils.computeTopK_TightVersion_accuracy(n, self.eval_Labels[batchId * batchSize: (batchId +1) * batchSize], rankedIdx))
       acc.append(np.mean(batchacc))
     return acc

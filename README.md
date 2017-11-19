@@ -10,27 +10,33 @@ SSE model translates a sequence of symbols into a vector of numbers, so that dif
 
 Depending on each specific task, similar semantic meanings can have different definitions. For example, in the category classification task, similar semantic meanings means that for each correct pair of (listing-title, category), the SSE of listing-title is close to the SSE of corresponding category.  While in the information retrieval task, similar semantic meaning means for each relevant pair of (query, document), the SSE of query is close to the SSE of relevant document. While in the question answering task, the SSE of question is close to the SSE of correct answers.
 
-This repo contains some sample raw data, tools and recipes to allow user establish complete End2End solutions from scratch for four different typical NLP tasks: text classification, relevance ranking, cross-language information retrieval and question answering. This includes deep learning model training/testing pipeline, index generating pipeline, command line demo app, and the run-time RESTful webservices with trained models for these NLP tasks. By replacing supplied raw data with your own data, users can easily establish a complete solution for their own NLP tasks with this deep learning based SSE tech.
+This repo contains some sample raw data, tools and recipes to allow user establish complete End2End solutions from scratch for four different typical NLP tasks: text classification, relevance ranking, cross-language information retrieval and question answering. This includes deep learning model training/testing pipeline, index generating pipeline, visualize trained SSE embeddings, command line demo app, and the run-time RESTful webservices with trained models for these NLP tasks. By replacing supplied raw data with your own data, users can easily establish a complete solution for their own NLP tasks with this deep learning based SSE tech.
 
-Here is the quick-start instruction to build a text classification webservice from scratch including download the repo, setup environment, train model, run demo app and setup RESTful webservice.
+Here is the quick-start instruction to build a Chinese-English cross-lingual information retrieval webservice from scratch including download the repo, setup environment, train model, visualize SSE embeddings, run demo app and setup RESTful webservice.
 
 
 ```bash
 git clone https://github.com/eBay/Sequence-Semantic-Embedding.git
 cd Sequence-Semantic-Embedding
 ./env_setup.sh
-make train-classificastion
-make index-classification
-make demo-classification
+make train-crosslingual
+make index-crosslingual
+make visualize-crosslingual
+make demo-crosslingual
 export FLASK_APP=webserver.py
-export MODEL_TYPE=classification
+export MODEL_TYPE=crosslingual
 export INDEX_FILE=targetEncodingIndex.tsv
 python -m flask run --port 5000 --host=0.0.0.0
 ```
 
-Once webserver has started, you can open a browse and send a GET request like: http://your-computer-ip-address:5000/api/classify?keywords=sunglasses
+Once webserver has started, you can open a browse and send a GET request like: http://<your-ip-address>:5000/api/crosslingual?query=运动裤&?nbest=10
 
+A zoomed out sample learned SSE for Chinese/English/Chinse-English-Mixed queries are shown as below. 
 
+<a href="url"><img src="https://github.com/eBay/Sequence-Semantic-Embedding/blob/master/images/SSE-CrossLingual-ZoomedOut.png" align="left" height="300" width="200" ></a>
+
+In the plot, Chinese/English/Chinese-English-Mixed queries that have similar semantic meanings are placed close to each other. This means  the models are converged to a good state. A much larger detailed SSE visualization version is [here](images/SSE-CrossLingual-Visualization.png)
+   
 See the [Content](#content) below for more details on how SSE training works, and how to use it to build the complete solution for your own NLP task with your own dataset.
 
 ### [Content](#content)
@@ -40,7 +46,7 @@ See the [Content](#content) below for more details on how SSE training works, an
     * [Basic Idea](#basic-idea)
     * [Training Data](#training-data)
     * [Train Model](#train-model)
-    * [Visualize Training progress in TensorBoard](#visualize-training-progress-in-tensorboard)
+    * [SSE Visualization](#sse-visualization)
 * [Index Generating](#index-generating)
 * [Command Line Demo](#command-line-demo)
 * [Setup WebService](#setup-webservice)
@@ -145,12 +151,19 @@ To start training your models, issue command as below. For classification task, 
 make train-classification
 ```
 
-### Visualize Training progress in TensorBoard
+### SSE Visualization
 
-Use below command to start TF's tensorboard and view the Training progress in your webbrowser.
+
+Use below command to start TF's tensorboard and view the Training progress in your web browser.
 
 ``` bash
 tensorboard --logdir=models-classification
+```
+
+Use below command to visualize the trained SSE embeddings and verify if model converged to good state. 
+
+``` bash
+make visualize-classification
 ```
 
 ## Index Generating
@@ -217,6 +230,7 @@ If you want to train the model and build the webservice with your own dataset fr
 ```bash
 make train-classificastion
 make index-classification
+make visualize-classification
 make demo-classification
 export FLASK_APP=webserver.py
 export INDEX_FILE=targetEncodingIndex.tsv
@@ -242,6 +256,7 @@ If you want to build your own question answering webservice with your own FAQ da
 ```bash
 make train-qna
 make index-qna
+make visualize-qna
 make demo-qna
 export FLASK_APP=webserver.py
 export MODEL_TYPE=qna
@@ -268,6 +283,7 @@ If you want to build your own search relevance ranking webservice with your own 
 ```bash
 make train-ranking
 make index-ranking
+make visualize-ranking
 make demo-ranking
 export FLASK_APP=webserver.py
 export MODEL_TYPE=ranking
@@ -294,6 +310,7 @@ If you want to build your own cross-lingual information retrieval webservice wit
 ```bash
 make train-crosslingual
 make index-crosslingual
+make visualize-crosslingual
 make demo-crosslingual
 export FLASK_APP=webserver.py
 export MODEL_TYPE=crosslingual
@@ -304,7 +321,7 @@ python -m flask run --port 5000 --host=0.0.0.0
 Once the webserver starts, you can just open a web browser and put a GET request like below to see your crosslingual IR web service result:
 
 ```
-http://<your-ip-address>:5000/api/crosslingual?query=jeep夹克&?nbest=10
+http://<your-ip-address>:5000/api/crosslingual?query=运动裤&?nbest=10
 ```
 
 The webserver will return a json object with a list of top 10 (default) most relevant item with listing_title, Item_ID,  and matching scores.

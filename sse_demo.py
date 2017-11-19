@@ -56,7 +56,7 @@ os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"]=FLAGS.device  # value can be 0,1,2, 3
 
 
-def demo():
+def demo(nbest):
   if not os.path.exists( FLAGS.model_dir ):
     print('Model folder does not exist!!')
     exit(-1)
@@ -126,13 +126,13 @@ def demo():
       sourceEncodings = np.vstack(sourceEncodings)
       distances = np.dot(sourceEncodings, targetEncodings.T)
       rankedScore, rankedIdx = data_utils.getSortedResults(distances)
-      top5_confs = rankedScore[0][:5]
-      top5_tgtIDs = [ targetIDs[lbl] for lbl in rankedIdx[0][:5]]
-      top5_tgtNames = [ targetIDNameMap[id] for id in top5_tgtIDs ]
+      top_confs = rankedScore[0][:nbest]
+      top_tgtIDs = [ targetIDs[lbl] for lbl in rankedIdx[0][:nbest]]
+      top_tgtNames = [ targetIDNameMap[id] for id in top_tgtIDs ]
 
-      print('Top 5 Prediction results are:\n')
-      for idx in range(5):
-        print( 'top%d:  %s , %f ,  %s ' % ( idx+1, top5_tgtIDs[idx],  top5_confs[idx], top5_tgtNames[idx]) )
+      print('Top %s Prediction results are:\n' % nbest)
+      for idx in range(nbest):
+        print( 'top%d:  %s , %f ,  %s ' % ( idx+1, top_tgtIDs[idx],  top_confs[idx], top_tgtNames[idx]) )
       print("> ", end="")
 
       sys.stdout.flush()
@@ -144,7 +144,7 @@ def main(_):
     print("--model_dir must be specified.")
     sys.exit(1)
 
-  demo()
+  demo(int(sys.argv[1]))
 
 
 if __name__ == "__main__":

@@ -127,7 +127,7 @@ class SSEModel(object):
     self.tgt_cell_size = tgt_cell_size
     self.num_layers = num_layers
     self.learning_rate = tf.Variable(float(learning_rate), name='learning_rate', trainable=False)
-    self.learning_rate_decay_op = self.learning_rate.assign( tf.maximum( self.learning_rate * learning_rate_decay_factor, 1e-3) )
+    self.learning_rate_decay_op = self.learning_rate.assign( tf.maximum( self.learning_rate * learning_rate_decay_factor, 1e-4) )
     self.global_step = tf.Variable(0, name="global_step", trainable=False)
     self.targetSpaceSize = targetSpaceSize
     self.alpha = alpha
