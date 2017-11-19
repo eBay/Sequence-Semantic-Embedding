@@ -10,9 +10,9 @@ SSE model translates a sequence of symbols into a vector of numbers, so that dif
 
 Depending on each specific task, similar semantic meanings can have different definitions. For example, in the category classification task, similar semantic meanings means that for each correct pair of (listing-title, category), the SSE of listing-title is close to the SSE of corresponding category.  While in the information retrieval task, similar semantic meaning means for each relevant pair of (query, document), the SSE of query is close to the SSE of relevant document. While in the question answering task, the SSE of question is close to the SSE of correct answers.
 
-This repo contains some sample raw data, tools and recipes to allow user establish complete End2End solutions from scratch for four different typical NLP tasks: text classification, relevance ranking, cross-language information retrieval and question answering. This includes deep learning model training/testing pipeline, index generating pipeline, visualize trained SSE embeddings, command line demo app, and the run-time RESTful webservices with trained models for these NLP tasks. By replacing supplied raw data with your own data, users can easily establish a complete solution for their own NLP tasks with this deep learning based SSE tech.
+This repo contains some sample raw data, tools and recipes to allow user establish complete End2End solutions from scratch for four different typical NLP tasks: text classification, relevance ranking, cross-language information retrieval and question answering. This includes deep learning model training/testing pipeline, index generating pipeline, visualize trained SSE embeddings, command line demo app, and the run-time RESTful webservices with trained models. By replacing supplied raw data with your own data, users can easily establish a complete solution for their own NLP tasks with this deep learning based SSE toolkit.
 
-Here is the quick-start instruction to build a Chinese-English cross-lingual information retrieval webservice from scratch including download the repo, setup environment, train model, visualize SSE embeddings, run demo app and setup RESTful webservice.
+Below is a quick-start instruction to build a Chinese-English cross-lingual information retrieval webservice from scratch including download the repo, setup environment, train model, visualize learned SSE embeddings, run demo app and setup RESTful webservice.
 
 
 ```bash
@@ -31,10 +31,9 @@ python -m flask run --port 5000 --host=0.0.0.0
 
 Once webserver has started, you can open a browse and send a GET request like: http://<your-ip-address>:5000/api/crosslingual?query=运动裤&?nbest=10
 
-A sample learned SSE for Chinese/English/Chinse-English-Mixed queries are shown as below. In the plot, Chinese/English/Chinese-English-Mixed queries that have similar semantic meanings are placed close to each other. This means  the models are converged to a good state. 
+Below is the visualization plot of learned SSE for Chinese-English-Mixed cross-lingual queries with supplied raw data. In the plot, queries across different languages that have similar semantic meanings are placed very close to each other. This means  that the SSE models are converged to a good state. 
     ![Cross-Lingual SSE Representation Examples](images/SSE-CrossLingual-Visualization.png)
 
-   
 See the [Content](#content) below for more details on how SSE training works, and how to use it to build the complete solution for your own NLP task with your own dataset.
 
 ### [Content](#content)
