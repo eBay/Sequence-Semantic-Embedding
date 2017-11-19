@@ -31,8 +31,15 @@ python -m flask run --port 5000 --host=0.0.0.0
 
 Once webserver has started, you can open a browse and send a GET request like: http://<your-ip-address>:5000/api/crosslingual?query=运动裤&?nbest=10
 
-Below is the visualization plot of learned SSE for Chinese-English-Mixed cross-lingual queries with supplied raw data. In the plot, queries across different languages that have similar semantic meanings are placed very close to each other. This means  that the SSE models are converged to a good state. 
-    ![Cross-Lingual SSE Representation Examples](images/SSE-CrossLingual-Visualization.png)
+Here is the visualization plot of learned SSE for Chinese-English-Mixed cross-lingual queries trained with supplied raw data. Zoom into three different boxes as shown in below, the red box cluster is all about basketball shoes(篮球鞋)， the blue box is all about vest for winter(保暖马甲)，the green box is all about backpack(双肩背包). As we can see, queries across different languages that have similar semantic meanings are placed close to each other. This means the SSE models are converged to a good state. 
+ ![Cross-Lingual SSE Representation Examples](images/SSE-CrossLingual-Visualization.png)
+
+ ![Cross-Lingual SSE Representation Examples](images/SSE-CrossLingual-Backpack.png)
+    
+ ![Cross-Lingual SSE Representation Examples](images/SSE-CrossLingual-BasketBallShoes.png)
+
+ ![Cross-Lingual SSE Representation Examples](images/SSE-CrossLingual-DownVest.png)
+
 
 See the [Content](#content) below for more details on how SSE training works, and how to use it to build the complete solution for your own NLP task with your own dataset.
 
