@@ -75,7 +75,7 @@ def createIndexFile( model, encoder, rawfile, max_seq_len, encodeIndexFile, sess
       tgtSentence, tgtId = info[0], info[1]
       tgt_tokens = encoder.encode(tgtSentence.lower())
       tgtlen = len(tgt_tokens)
-      if tgtlen > max_seq_len - 1:
+      if tgtlen > max_seq_len - 2:
         #print('Current raw tgt file line exceed max number of supported keywords(%d): %s!!!' % (max_seq_len, line))
         continue
       tgt_tokens = tgt_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_len - tgtlen - 1)
