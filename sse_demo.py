@@ -94,10 +94,7 @@ def demo(nbest):
     # TODO: improve here later
     #load model
     modelConfigs = data_utils.load_model_configs(FLAGS.model_dir)
-    model = sse_model.SSEModel( int(modelConfigs['max_seq_length']), float(modelConfigs['max_gradient_norm']), int(modelConfigs['vocabsize']),
-                               int(modelConfigs['embedding_size']), int(modelConfigs['encoding_size']),
-                               int(modelConfigs['src_cell_size']), int(modelConfigs['tgt_cell_size']), int(modelConfigs['num_layers']),
-                               float(modelConfigs['learning_rate']), float(modelConfigs['learning_rate_decay_factor']), int(modelConfigs['targetSpaceSize']), network_mode=modelConfigs['network_mode'], forward_only=True, TOP_N=int(modelConfigs['TOP_N']) )
+    model = sse_model.SSEModel( modelConfigs )
     ckpt = tf.train.get_checkpoint_state(FLAGS.model_dir)
     if ckpt:
       print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -114,12 +111,14 @@ def demo(nbest):
       # Get token-ids for the input sentence.
       source_tokens = encoder.encode( tf.compat.as_str(sentence).lower())
       srclen = len(source_tokens)
-      if srclen > int(modelConfigs['max_seq_length']) - 1:
-        print(
-          'Max number of supported keywords is  %d \n Please try againt!!!!' % ( int(modelConfigs['max_seq_length']) ) )
-        continue
-      source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(modelConfigs['max_seq_length']) - srclen - 1)
-      feed_dict = model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([srclen+1]))
+      max_seq_length = int(modelConfigs['max_seq_length'])
+      if srclen > max_seq_length - 2:
+        print('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
+        source_tokens = [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
+      else:
+        source_tokens = [text_encoder.PAD_ID] * (max_seq_length - srclen - 1) + source_tokens + [text_encoder.EOS_ID]
+
+      feed_dict = model.get_source_encoding_feed_dict(np.array([source_tokens]))
       model.set_forward_only(True)
       sourceEncodings = sess.run( [model.src_seq_embedding], feed_dict= feed_dict )
       #sourceEncodings = sess.run([model.norm_src_seq_embedding], feed_dict=feed_dict)

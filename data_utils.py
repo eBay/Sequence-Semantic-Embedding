@@ -46,12 +46,10 @@ import os
 import re
 import tarfile
 import codecs
-import random
 import numpy as np
 import sys
 import text_encoder
 import tokenizer
-import time
 
 from six.moves import urllib
 
@@ -106,7 +104,7 @@ def get_data_set(rawDir, processedDir):
         srcFile.write(info[0].lower() + '\n')
       # produce the target corpus file
       for line in codecs.open(os.path.join(processedDir, 'targetIDs'), 'r', 'utf-8'):
-        info = line.strip().split('\t') # tgtSeq, tgtId = line.strip().split('\t')
+        info = line.strip().split('\t')
         if len(info) < 2:
           print('Error in targetIDs file:%s' % line)
           continue
@@ -148,24 +146,24 @@ def gen_postive_corpus( pairfilename, encodedTargetSpace, encoder, max_seq_lengt
       continue
     source_tokens = encoder.encode(srcSeq.lower())
     seqlen = len(source_tokens)
-    if seqlen > max_seq_length - 1:
+    if seqlen > max_seq_length - 2:
       print(
         'Error Deteced!!! \n Source Seq:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
         srcSeq, seqlen, max_seq_length))
-      continue
-    source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_length - seqlen - 1)
+      source_tokens =  [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
+    else:
+      source_tokens = [text_encoder.PAD_ID] * (max_seq_length - seqlen - 1) + source_tokens + [text_encoder.EOS_ID]
     Corpus.append( (source_tokens, verifiedTgtIds ) )
   return Corpus
 
 
-def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, neg_samples, max_seq_length):
+def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, max_seq_length):
   """
   Get SSE training, and Evaluation related data, create tokenizer and vocabulary.
 
   :param raw_data_dir:
   :param processed_data_dir:
   :param vocabulary_size:
-  :param neg_samples:
   :param max_seq_length:
   :return:
   """
@@ -193,12 +191,13 @@ def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, neg_samp
     tgtSeq, id = line.strip().split('\t')
     token_ids = encoder.encode(tgtSeq.lower())
     seqlen = len(token_ids)
-    if seqlen > max_seq_length - 1:
+    if seqlen > max_seq_length - 2:
       print(
         'Error Detected!!! \n Target:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
         tgtSeq, seqlen, max_seq_length))
-      continue
-    token_ids = token_ids + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_length - seqlen - 1)
+      token_ids = [text_encoder.PAD_ID] + token_ids[:max_seq_length-2] + [text_encoder.EOS_ID]
+    else:
+      token_ids =  [text_encoder.PAD_ID] * (max_seq_length - seqlen - 1) + token_ids + [text_encoder.EOS_ID]
     encodedFullTargetSpace[id] = token_ids
     tgtIdNameMap[id] = tgtSeq
     encodedFullTargetFile.write(id + '\t' + tgtSeq.strip() + '\t' + ','.join([str(i) for i in token_ids]) + '\n')
@@ -241,26 +240,11 @@ def load_encodedTargetSpace(processed_data_dir):
 
 
 
+
 def save_model_configs(processed_data_dir, configs):
-  max_seq_length, max_gradient_norm, vocabsize, embedding_size, \
-  encoding_size, src_cell_size,  tgt_cell_size, num_layers, \
-  learning_rate,  learning_rate_decay_factor, targetSpaceSize, network_mode, TOP_N, alpha, neg_samples = configs
   outfile = codecs.open( os.path.join(processed_data_dir,'modelConfig.param'), 'w', 'utf-8')
-  outfile.write( 'max_seq_length=' + str(max_seq_length) + '\n')
-  outfile.write( 'max_gradient_norm=' + str(max_gradient_norm) + '\n')
-  outfile.write( 'vocabsize=' + str(vocabsize) + '\n')
-  outfile.write( 'embedding_size=' + str(embedding_size) + '\n')
-  outfile.write( 'encoding_size=' + str(encoding_size) + '\n')
-  outfile.write( 'src_cell_size=' + str(src_cell_size) + '\n')
-  outfile.write( 'tgt_cell_size=' + str(tgt_cell_size) + '\n')
-  outfile.write( 'num_layers=' + str(num_layers) + '\n')
-  outfile.write( 'learning_rate=' + str(learning_rate) + '\n')
-  outfile.write( 'learning_rate_decay_factor=' + str(learning_rate_decay_factor) + '\n')
-  outfile.write( 'targetSpaceSize=' + str(targetSpaceSize) + '\n')
-  outfile.write( 'network_mode=' + str(network_mode) + '\n' )
-  outfile.write( 'TOP_N=' + str(TOP_N) + '\n' )
-  outfile.write( 'alpha=' + str(alpha) + '\n' )
-  outfile.write( 'neg_samples=' + str(neg_samples) + '\n' )
+  for key in configs.keys():
+    outfile.write( str(key) + '=' + str(configs[key]) + '\n' )
   outfile.close()
   return
 
@@ -273,6 +257,7 @@ def load_model_configs(processed_data_dir):
     key, value = line.strip().split('=')
     modelConfig[key]=value
   return modelConfig
+
 
 
 def getSortedResults(scores):

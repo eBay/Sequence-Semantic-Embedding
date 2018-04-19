@@ -87,13 +87,7 @@ class FlaskApp(Flask):
     self.sess = tf.Session(config=cfg)
     #load model
     self.modelConfigs = data_utils.load_model_configs(self.model_dir)
-    self.model = sse_model.SSEModel( int(self.modelConfigs['max_seq_length']), float(self.modelConfigs['max_gradient_norm']),
-                                     int(self.modelConfigs['vocabsize']),
-                               int(self.modelConfigs['embedding_size']), int(self.modelConfigs['encoding_size']),
-                               int(self.modelConfigs['src_cell_size']), int(self.modelConfigs['tgt_cell_size']), int(self.modelConfigs['num_layers']),
-                               float(self.modelConfigs['learning_rate']), float(self.modelConfigs['learning_rate_decay_factor']),
-                                     int(self.modelConfigs['targetSpaceSize']), network_mode=self.modelConfigs['network_mode'],
-                                     forward_only=True, TOP_N=int(self.modelConfigs['TOP_N']) )
+    self.model = sse_model.SSEModel( self.modelConfigs )
     ckpt = tf.train.get_checkpoint_state(self.model_dir)
     if ckpt:
       print("loading model from %s" % ckpt.model_checkpoint_path)
@@ -118,12 +112,15 @@ def classification():
     # inference tensorflow model
     # Get token-ids for the input sentence.
     source_tokens = app.encoder.encode(tf.compat.as_str(keywords).lower())
-    src_len = len(source_tokens)
-    if src_len > int(app.modelConfigs['max_seq_length']):
-      source_tokens = source_tokens[:int(app.modelConfigs['max_seq_length'])]
+    srclen = len(source_tokens)
+    max_seq_length = int(app.modelConfigs['max_seq_length'])
+    if srclen > max_seq_length - 2:
+      print('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
+      source_tokens = [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
     else:
-      source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(app.modelConfigs['max_seq_length']) - src_len - 1)
-    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([src_len+1]))
+      source_tokens = [text_encoder.PAD_ID] * (max_seq_length - srclen - 1) + source_tokens + [text_encoder.EOS_ID]
+
+    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]))
     #sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
     sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
     sourceEncodings = np.vstack(sourceEncodings)
@@ -155,12 +152,14 @@ def relevanceRanking():
     # inference tensorflow model
     # Get token-ids for the input sentence.
     source_tokens = app.encoder.encode(tf.compat.as_str(keywords).lower())
-    src_len = len(source_tokens)
-    if src_len > int(app.modelConfigs['max_seq_length']):
-      source_tokens = source_tokens[:int(app.modelConfigs['max_seq_length'])]
+    srclen = len(source_tokens)
+    max_seq_length = int(app.modelConfigs['max_seq_length'])
+    if srclen > max_seq_length - 2:
+      print('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
+      source_tokens = [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
     else:
-      source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(app.modelConfigs['max_seq_length']) - src_len - 1)
-    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([src_len+1]))
+      source_tokens = [text_encoder.PAD_ID] * (max_seq_length - srclen - 1) + source_tokens + [text_encoder.EOS_ID]
+    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]))
     sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
     #sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
     sourceEncodings = np.vstack(sourceEncodings)
@@ -194,12 +193,14 @@ def questionAnswering():
     # inference tensorflow model
     # Get token-ids for the input sentence.
     source_tokens = app.encoder.encode(tf.compat.as_str(keywords).lower())
-    src_len = len(source_tokens)
-    if src_len > int(app.modelConfigs['max_seq_length']):
-      source_tokens = source_tokens[:int(app.modelConfigs['max_seq_length'])]
+    srclen = len(source_tokens)
+    max_seq_length = int(app.modelConfigs['max_seq_length'])
+    if srclen > max_seq_length - 2:
+      print('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
+      source_tokens = [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
     else:
-      source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(app.modelConfigs['max_seq_length']) - src_len - 1)
-    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([src_len+1]))
+      source_tokens = [text_encoder.PAD_ID] * (max_seq_length - srclen - 1) + source_tokens + [text_encoder.EOS_ID]
+    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]))
     sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
     #sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
     sourceEncodings = np.vstack(sourceEncodings)
@@ -233,12 +234,16 @@ def crosslingualSearch():
     # inference tensorflow model
     # Get token-ids for the input sentence.
     source_tokens = app.encoder.encode(tf.compat.as_str(keywords).lower())
-    src_len = len(source_tokens)
-    if src_len > int(app.modelConfigs['max_seq_length']):
-      source_tokens = source_tokens[:int(app.modelConfigs['max_seq_length'])]
+
+    srclen = len(source_tokens)
+    max_seq_length = int(app.modelConfigs['max_seq_length'])
+    if srclen > max_seq_length - 2:
+      print('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
+      source_tokens = [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
     else:
-      source_tokens = source_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * ( int(app.modelConfigs['max_seq_length']) - src_len - 1)
-    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]), np.array([src_len+1]))
+      source_tokens = [text_encoder.PAD_ID] * (max_seq_length - srclen - 1) + source_tokens + [text_encoder.EOS_ID]
+
+    dict = app.model.get_source_encoding_feed_dict(np.array([source_tokens]))
     sourceEncodings = app.sess.run([app.model.src_seq_embedding], feed_dict=dict)
     #sourceEncodings = app.sess.run([app.model.norm_src_seq_embedding], feed_dict=dict)
     sourceEncodings = np.vstack(sourceEncodings)

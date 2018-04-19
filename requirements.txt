@@ -1,11 +1,7 @@
-#tensorflow>=1.4.0rc1
-tensorflow==1.3.0
-keras>=2.0.6
+tensorflow
 matplotlib>=1.5.1
 scikit-learn>=0.17.1
 Flask>=0.11.1
 jsonify>=0.5
 future>=0.16.0
 six>=1.10.0
-sklearn>=0.18.1
-matplotlib>=2.0.2

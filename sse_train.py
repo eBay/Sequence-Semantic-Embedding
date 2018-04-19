@@ -48,16 +48,12 @@ import sse_model
 import sse_evaluator
 import sse_index
 import text_encoder
-
+from data import *
 
 tf.app.flags.DEFINE_float("learning_rate", 0.01, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99,
                           "Learning rate decays by this much.")
-tf.app.flags.DEFINE_float("max_gradient_norm", 5.0,
-                          "Clip gradients to this norm.")
-tf.app.flags.DEFINE_float("alpha", 1.0, "weight for positive sample loss")
 
-tf.app.flags.DEFINE_integer("neg_samples", 1, "number of negative samples per source sequence samples")
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training(positive pair count based).")
 tf.app.flags.DEFINE_integer("embedding_size", 50, "Size of word embedding vector.")
@@ -92,19 +88,17 @@ os.environ["CUDA_VISIBLE_DEVICES"]=FLAGS.device  # value can be 0,1,2, 3
 
 def create_model(session, targetSpaceSize, vocabsize, forward_only):
   """Create SSE model and initialize or load parameters in session."""
-  modelConfigs = ( FLAGS.max_seq_length, FLAGS.max_gradient_norm,  vocabsize,
-      FLAGS.embedding_size, FLAGS.encoding_size,
-      FLAGS.src_cell_size, FLAGS.tgt_cell_size, FLAGS.num_layers,
-      FLAGS.learning_rate, FLAGS.learning_rate_decay_factor, targetSpaceSize ,
-      FLAGS.network_mode , FLAGS.predict_nbest, FLAGS.alpha, FLAGS.neg_samples )
 
-  data_utils.save_model_configs(FLAGS.model_dir, modelConfigs)
+  modelParams = {'max_seq_length': FLAGS.max_seq_length, 'vocab_size': vocabsize,
+                 'embedding_size': FLAGS.embedding_size, 'encoding_size': FLAGS.encoding_size,
+                 'learning_rate': FLAGS.learning_rate, 'learning_rate_decay_factor': FLAGS.learning_rate_decay_factor,
+                 'src_cell_size':FLAGS.src_cell_size, 'tgt_cell_size':FLAGS.tgt_cell_size,
+                 'network_mode': FLAGS.network_mode, 'predict_nbest':FLAGS.predict_nbest,
+                 'targetSpaceSize':targetSpaceSize, 'forward_only': forward_only}
 
-  model = sse_model.SSEModel( FLAGS.max_seq_length, FLAGS.max_gradient_norm,  vocabsize,
-      FLAGS.embedding_size, FLAGS.encoding_size,
-      FLAGS.src_cell_size, FLAGS.tgt_cell_size, FLAGS.num_layers,
-      FLAGS.learning_rate, FLAGS.learning_rate_decay_factor, targetSpaceSize ,
-      network_mode=FLAGS.network_mode , forward_only=forward_only, TOP_N=FLAGS.predict_nbest, alpha=FLAGS.alpha, neg_samples = FLAGS.neg_samples )
+  data_utils.save_model_configs(FLAGS.model_dir, modelParams)
+
+  model = sse_model.SSEModel( modelParams )
 
   ckpt = tf.train.get_checkpoint_state(FLAGS.model_dir)
   if ckpt:
@@ -134,88 +128,6 @@ def set_up_logging(run_id):
   console_handler.setFormatter(formatter)
   root_logger.addHandler(console_handler)
 
-###################################################
-# # doing negative sampling using random choice
-###################################################
-# def buildMixedTrainBatch(trainPosCorpus, encodedFullTargetSpace, fullSetTargetIds, fullSetLen, neg_samples, negIdx ):
-#   """
-#
-#   :param trainPosCorpus:   (source_tokens, verifiedTgtIds )
-#   :param encodedTgtSpace:
-#   :param fullSetTargetIds:
-#   :param fullSetLen:
-#   :return: create mixed binary Training Corpus: (source_tokens, src_len, tgt_tokesn, tgt_len, pos_neg_labels)
-#           every positive sample will followed by #neg_sample amount of negative samples
-#   """
-#   source_inputs, src_lens, tgt_inputs, tgt_lens, labels = [], [], [], [], []
-#   for pos_entry in trainPosCorpus:
-#     source_tokens, verifiedTgtIds = pos_entry
-#     rawnegSets = fullSetTargetIds
-#     rawnegSetLen = fullSetLen - 1
-#     posSets = set(verifiedTgtIds)
-#     for curPosTgtId in verifiedTgtIds:
-#       # add current positive pair
-#       source_inputs.append(source_tokens)
-#       src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
-#       tgt_inputs.append(encodedFullTargetSpace[curPosTgtId])
-#       tgt_lens.append(encodedFullTargetSpace[curPosTgtId].index(text_encoder.PAD_ID) + 1)
-#       labels.append(1.0)
-#       choseNegSet = set()
-#       # add negative pairs as the pair-wise anchor for current positive sample:
-#       for _ in range(neg_samples):
-#         negTgt = rawnegSets[random.randint(0, rawnegSetLen)]
-#         while negTgt in (choseNegSet.union(posSets)):
-#           negTgt = rawnegSets[random.randint(0, rawnegSetLen)]
-#           if len(choseNegSet.union(posSets)) == fullSetLen:
-#             break
-#         choseNegSet.add(negTgt)
-#         source_inputs.append(source_tokens)
-#         src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
-#         tgt_inputs.append(encodedFullTargetSpace[negTgt])
-#         tgt_lens.append(encodedFullTargetSpace[negTgt].index(text_encoder.PAD_ID) + 1)
-#         labels.append(0.0)
-#   newNegIdx = negIdx % fullSetLen
-#   return source_inputs, src_lens, tgt_inputs, tgt_lens, labels, newNegIdx
-
-
-##################################################
-# doing negative sampling via round robin
-####################################################
-def buildMixedTrainBatch(trainPosCorpus, encodedFullTargetSpace, fullSetTargetIds, fullSetLen, neg_samples, negIdx ):
-  """
-
-  :param trainPosCorpus:   (source_tokens, verifiedTgtIds )
-  :param encodedTgtSpace:
-  :param fullSetTargetIds:
-  :param fullSetLen:
-  :return: create mixed binary Training Corpus: (source_tokens, src_len, tgt_tokesn, tgt_len, pos_neg_labels)
-          every positive sample will followed by #neg_sample amount of negative samples
-  """
-  negIdx = negIdx%fullSetLen
-  source_inputs, src_lens, tgt_inputs, tgt_lens, labels = [], [], [], [], []
-  for pos_entry in trainPosCorpus:
-    source_tokens, verifiedTgtIds = pos_entry
-    curPosTgtId = random.choice( verifiedTgtIds )
-    # add current positive pair
-    source_inputs.append(source_tokens)
-    src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
-    tgt_inputs.append(encodedFullTargetSpace[curPosTgtId])
-    tgt_lens.append(encodedFullTargetSpace[curPosTgtId].index(text_encoder.PAD_ID) + 1)
-    labels.append(1.0)
-    # add negative pairs as the pair-wise anchor for current positive sample:
-    for _ in range(neg_samples):
-      negTgt = fullSetTargetIds[negIdx]
-      while negTgt in verifiedTgtIds:
-        negIdx = (negIdx+1) % fullSetLen
-        negTgt = fullSetTargetIds[negIdx]
-      source_inputs.append(source_tokens)
-      src_lens.append(source_tokens.index(text_encoder.PAD_ID) + 1)
-      tgt_inputs.append(encodedFullTargetSpace[negTgt])
-      tgt_lens.append(encodedFullTargetSpace[negTgt].index(text_encoder.PAD_ID) + 1)
-      labels.append(0.0)
-      negIdx = (negIdx+1) % fullSetLen
-  return source_inputs, src_lens, tgt_inputs, tgt_lens, labels, negIdx % fullSetLen
-
 
 def train():
   # Prepare data.
@@ -225,16 +137,15 @@ def train():
     if not os.path.exists(d):
       os.makedirs(d)
 
-  encoder, train_corpus, eval_corpus, encodedTgtSpace, tgtIdNameMap = data_utils.prepare_raw_data(
-      FLAGS.data_dir, FLAGS.model_dir, FLAGS.vocab_size, FLAGS.neg_samples, FLAGS.max_seq_length )
+  data = Data(FLAGS.model_dir,FLAGS.data_dir, FLAGS.vocab_size, FLAGS.max_seq_length)
+  epoc_steps = len(data.rawTrainPosCorpus) /  FLAGS.batch_size
 
-  epoc_steps = int(math.floor( len(train_corpus) /  FLAGS.batch_size ) )
-
-  print( "Training Data: %d total positive samples, each epoch need %d steps" % (len(train_corpus), epoc_steps ) )
+  print( "Training Data: %d total positive samples, each epoch need %d steps" % (len(data.rawTrainPosCorpus), epoc_steps ) )
 
   cfg = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)
   with tf.Session(config=cfg) as sess:
-    model = create_model( sess, len(encodedTgtSpace), encoder.vocab_size,  False )
+    model = create_model( sess, data.rawnegSetLen, data.vocab_size, False )
+
     #setup tensorboard logging
     sw =  tf.summary.FileWriter( logdir=FLAGS.model_dir,  graph=sess.graph, flush_secs=120)
     summary_op = model.add_summaries()
@@ -242,18 +153,13 @@ def train():
     step_time, loss, train_acc = 0.0, 0.0, 0.0
     current_step = 0
     previous_accuracies = []
-    fullSetTargetIds = list(encodedTgtSpace.keys())
-    fullSetLen = len(fullSetTargetIds)
-    negIdx = random.randint(0, fullSetLen - 1)
     for epoch in range( FLAGS.max_epoc ):
       epoc_start_Time = time.time()
-      random.shuffle(train_corpus)
-      for batchId in range( math.floor(epoc_steps * 0.95) ): #basic drop out here
+      for batchId in range( epoc_steps ):
         start_time = time.time()
-        source_inputs, src_lens, tgt_inputs, tgt_lens, labels, negIdx = \
-          buildMixedTrainBatch( train_corpus[batchId*FLAGS.batch_size:(batchId+1)*FLAGS.batch_size], encodedTgtSpace,fullSetTargetIds, fullSetLen,FLAGS.neg_samples, negIdx)
+        source_inputs, tgt_inputs, labels = data.get_train_batch(FLAGS.batch_size)
         model.set_forward_only(False)
-        d = model.get_train_feed_dict(source_inputs, tgt_inputs, labels, src_lens, tgt_lens)
+        d = model.get_train_feed_dict(source_inputs, tgt_inputs, labels)
         ops = [model.train, summary_op, model.loss, model.train_acc ]
         _, summary, step_loss, step_train_acc = sess.run(ops, feed_dict=d)
         step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
@@ -309,8 +215,8 @@ def train():
       # run task specific evaluation afer each epoch
       if (FLAGS.task_type not in ['ranking', 'crosslingual']) or ( (epoch+1) % 20 == 0 ):
         model.set_forward_only(True)
-        sse_index.createIndexFile( model, encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename), FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess, batchsize=1000 )
-        evaluator = sse_evaluator.Evaluator(model, eval_corpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile) , sess)
+        sse_index.createIndexFile( model, data.encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename), FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess, batchsize=1000 )
+        evaluator = sse_evaluator.Evaluator(model, data.rawEvalCorpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile) , sess)
         acc1, acc3, acc10 = evaluator.eval()
         print("epoc#%d, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f \n\n\n" % (epoch, acc1, acc3, acc10) )
       # Save checkpoint at end of each epoch

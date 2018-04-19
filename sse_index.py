@@ -64,7 +64,7 @@ def createIndexFile( model, encoder, rawfile, max_seq_len, encodeIndexFile, sess
   cnt = 0
   print("Start indexing whole target space entries with current model ...")
   for batchId in range(math.ceil(len(rawdata) / batchsize)):
-    tgtInputs, tgtLens, tgtIds, tgtSentences = [], [], [], []
+    tgtInputs, tgtIds, tgtSentences =  [], [], []
     for line in rawdata[batchId * batchsize:(batchId + 1) * batchsize]:
       cnt += 1
       # Get token-ids for the raw target sequence
@@ -75,17 +75,20 @@ def createIndexFile( model, encoder, rawfile, max_seq_len, encodeIndexFile, sess
       tgtSentence, tgtId = info[0], info[1]
       tgt_tokens = encoder.encode(tgtSentence.lower())
       tgtlen = len(tgt_tokens)
+
       if tgtlen > max_seq_len - 2:
-        #print('Current raw tgt file line exceed max number of supported keywords(%d): %s!!!' % (max_seq_len, line))
-        continue
-      tgt_tokens = tgt_tokens + [text_encoder.EOS_ID] + [text_encoder.PAD_ID] * (max_seq_len - tgtlen - 1)
+        print(
+          'Error Detected!!! \n Target:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
+            tgtSentence, tgtlen, max_seq_len))
+        tgt_tokens = [text_encoder.PAD_ID] + tgt_tokens[:max_seq_len - 2] + [text_encoder.EOS_ID]
+      else:
+        tgt_tokens = [text_encoder.PAD_ID] * (max_seq_len - tgtlen - 1) + tgt_tokens + [text_encoder.EOS_ID]
+
       tgtInputs.append(tgt_tokens)
-      tgtLens.append(tgt_tokens.index(text_encoder.PAD_ID) + 1)
       tgtIds.append(tgtId)
       tgtSentences.append(tgtSentence)
-    dict = model.get_target_encoding_feed_dict(tgtInputs, tgtLens)
+    dict = model.get_target_encoding_feed_dict(tgtInputs)
     targetsEncodings = session.run([model.tgt_seq_embedding], feed_dict=dict)
-    #targetsEncodings = session.run([model.norm_tgt_seq_embedding], feed_dict=dict)
     targetsEncodings = np.vstack(targetsEncodings)
     for idx in range(len(tgtSentences)):
       outFile.write(
@@ -110,10 +113,7 @@ def index(model_dir, rawfile, encodeIndexFile, batchsize=10000):
   with tf.Session(config=cfg) as sess:
     #load model
     modelConfigs = data_utils.load_model_configs(model_dir)
-    model = sse_model.SSEModel( int(modelConfigs['max_seq_length']), float(modelConfigs['max_gradient_norm']), int(modelConfigs['vocabsize']),
-                               int(modelConfigs['embedding_size']), int(modelConfigs['encoding_size']),
-                               int(modelConfigs['src_cell_size']), int(modelConfigs['tgt_cell_size']), int(modelConfigs['num_layers']),
-                               float(modelConfigs['learning_rate']), float(modelConfigs['learning_rate_decay_factor']), int(modelConfigs['targetSpaceSize']), network_mode=modelConfigs['network_mode'], forward_only=True, TOP_N=int(modelConfigs['TOP_N']) )
+    model = sse_model.SSEModel( modelConfigs )
     ckpt = tf.train.get_checkpoint_state(model_dir)
     if ckpt:
       print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
