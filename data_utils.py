@@ -94,7 +94,7 @@ def get_data_set(rawDir, processedDir):
       for line in codecs.open( os.path.join(processedDir, 'TrainPairs'), 'r', 'utf-8'):
         info = line.strip().split('\t') # srcSeq,  tgtId = line.strip().split('\t')
         if len(info) < 2:
-          print('Error train pair data:%s' % line)
+          print('Warning: bad line in train pair data:%s' % line)
           continue
         srcFile.write(info[0].lower() + '\n')
       for line in codecs.open(os.path.join(processedDir, 'EvalPairs'), 'r', 'utf-8'):
@@ -106,7 +106,7 @@ def get_data_set(rawDir, processedDir):
       for line in codecs.open(os.path.join(processedDir, 'targetIDs'), 'r', 'utf-8'):
         info = line.strip().split('\t')
         if len(info) < 2:
-          print('Error in targetIDs file:%s' % line)
+          print('Warning: bad line in targetIDs file:%s' % line)
           continue
         tgtFile.write(info[0].lower() + '\n')
   return
@@ -137,7 +137,7 @@ def gen_postive_corpus( pairfilename, encodedTargetSpace, encoder, max_seq_lengt
     verifiedTgtIds = []
     for tgtid in tgtIds.split('|'):
       if tgtid not in tgtIdSets:
-        print('Error Detected!! trouble in finding targetID in target Space file!! %s' % line)
+        print('Warning! trouble in finding targetID in target Space file!! %s' % line)
         continue
       else:
         verifiedTgtIds.append(tgtid)
@@ -148,7 +148,7 @@ def gen_postive_corpus( pairfilename, encodedTargetSpace, encoder, max_seq_lengt
     seqlen = len(source_tokens)
     if seqlen > max_seq_length - 2:
       print(
-        'Error Deteced!!! \n Source Seq:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
+        'Warning: Source Seq:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
         srcSeq, seqlen, max_seq_length))
       source_tokens =  [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
     else:
@@ -193,7 +193,7 @@ def prepare_raw_data(raw_data_dir, processed_data_dir, vocabulary_size, max_seq_
     seqlen = len(token_ids)
     if seqlen > max_seq_length - 2:
       print(
-        'Error Detected!!! \n Target:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
+        'Warning: Target:\n %s \n Its seq length is:%d,  which is longer than MAX_SEQ_LENTH of %d. Try to increase limit!!!!' % (
         tgtSeq, seqlen, max_seq_length))
       token_ids = [text_encoder.PAD_ID] + token_ids[:max_seq_length-2] + [text_encoder.EOS_ID]
     else:
