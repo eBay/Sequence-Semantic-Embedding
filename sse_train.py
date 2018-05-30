@@ -50,6 +50,13 @@ import sse_index
 import text_encoder
 from data import *
 
+
+import logging
+from logging.handlers import RotatingFileHandler
+from logging import handlers
+
+
+
 tf.app.flags.DEFINE_float("learning_rate", 0.01, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99,
                           "Learning rate decays by this much.")
@@ -102,36 +109,37 @@ def create_model(session, targetSpaceSize, vocabsize, forward_only):
 
   ckpt = tf.train.get_checkpoint_state(FLAGS.model_dir)
   if ckpt:
-    print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
+    logging.info("Reading model parameters from %s" % ckpt.model_checkpoint_path)
     model.saver.restore(session, ckpt.model_checkpoint_path)
   else:
     if forward_only:
-      print('Error!!!Could not load any model from specified folder: %s' % FLAGS.model_dir )
+      logging.error('Error!!!Could not load any model from specified folder: %s' % FLAGS.model_dir )
       exit(-1)
     else:
-      print("Created model with fresh parameters.")
+      logging.info("Created model with fresh parameters.")
       session.run(tf.global_variables_initializer())
   return model
 
 
 
-def set_up_logging(run_id):
-  formatter = logging.Formatter("%(asctime)s: %(message)s")
-  root_logger = logging.getLogger()
-  root_logger.setLevel(logging.INFO)
+def set_up_logging():
+  if not os.path.exists(FLAGS.model_dir):
+    os.makedirs(FLAGS.model_dir)
 
-  file_handler = logging.FileHandler("%s.log" % run_id)
-  file_handler.setFormatter(formatter)
-  root_logger.addHandler(file_handler)
-
-  console_handler = logging.StreamHandler(sys.stdout)
-  console_handler.setFormatter(formatter)
-  root_logger.addHandler(console_handler)
+  log = logging.getLogger('')
+  log.setLevel(logging.DEBUG)
+  format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+  ch = logging.StreamHandler(sys.stdout)
+  ch.setFormatter(format)
+  log.addHandler(ch)
+  fh = handlers.RotatingFileHandler(FLAGS.model_dir + '/TrainingLog.txt', maxBytes=(1048576 * 20), backupCount=7)
+  fh.setFormatter(format)
+  log.addHandler(fh)
 
 
 def train():
   # Prepare data.
-  print("Preparing Train & Eval data in %s" % FLAGS.data_dir)
+  logging.info("Preparing Train & Eval data in %s" % FLAGS.data_dir)
 
   for d in FLAGS.data_dir, FLAGS.model_dir:
     if not os.path.exists(d):
@@ -140,7 +148,7 @@ def train():
   data = Data(FLAGS.model_dir,FLAGS.data_dir, FLAGS.vocab_size, FLAGS.max_seq_length)
   epoc_steps = len(data.rawTrainPosCorpus) /  FLAGS.batch_size
 
-  print( "Training Data: %d total positive samples, each epoch need %d steps" % (len(data.rawTrainPosCorpus), epoc_steps ) )
+  logging.info( "Training Data: %d total positive samples, each epoch need %d steps" % (len(data.rawTrainPosCorpus), epoc_steps ) )
 
   cfg = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)
   with tf.Session(config=cfg) as sess:
@@ -169,7 +177,7 @@ def train():
 
         # Once in a while, we save checkpoint, print statistics, and run evals.
         if current_step % FLAGS.steps_per_checkpoint == 0:
-          print ("global epoc: %.3f, global step %d, learning rate %.4f step-time:%.2f loss:%.4f train_binary_acc:%.4f " %
+          logging.info("global epoc: %.3f, global step %d, learning rate %.4f step-time:%.2f loss:%.4f train_binary_acc:%.4f " %
                  ( float(model.global_step.eval())/ float(epoc_steps), model.global_step.eval(), model.learning_rate.eval(),
                              step_time, step_loss, train_acc ))
           checkpoint_path = os.path.join(FLAGS.model_dir, "SSE-LSTM.ckpt")
@@ -193,16 +201,16 @@ def train():
           previous_accuracies.append(train_acc)
           # save currently best-ever model
           if train_acc == max(previous_accuracies):
-            print("Better Accuracy %.4f found. Saving current best model ..." % train_acc )
+            logging.info("Better Accuracy %.4f found. Saving current best model ..." % train_acc )
             model.save(sess, checkpoint_path + "-BestEver")
           else:
-            print("Best Accuracy is: %.4f, while current round is: %.4f" % (max(previous_accuracies), train_acc) )
-            print("skip saving model ...")
+            logging.info("Best Accuracy is: %.4f, while current round is: %.4f" % (max(previous_accuracies), train_acc) )
+            logging.info("skip saving model ...")
           # if finished at least 2 Epocs and still no further accuracy improvement, stop training
           # report the best accuracy number and final model's number and save it.
           if epoch > 10 and train_acc < min(previous_accuracies[-5:]):
             p = model.save(sess, checkpoint_path + "-final")
-            print("After around %d Epocs no further improvement, Training finished, wrote checkpoint to %s." % (epoch, p) )
+            logging.info("After around %d Epocs no further improvement, Training finished, wrote checkpoint to %s." % (epoch, p) )
             break
 
           # reset current checkpoint step statistics
@@ -210,7 +218,7 @@ def train():
 
 
       epoc_train_time = time.time() - epoc_start_Time
-      print('\n\n\nepoch# %d  took %f hours' % ( epoch , epoc_train_time / (60.0 * 60) ) )
+      logging.info('\n\n\nepoch# %d  took %f hours' % ( epoch , epoc_train_time / (60.0 * 60) ) )
 
       # run task specific evaluation afer each epoch
       if (FLAGS.task_type not in ['ranking', 'crosslingual']) or ( (epoch+1) % 20 == 0 ):
@@ -218,27 +226,22 @@ def train():
         sse_index.createIndexFile( model, data.encoder, os.path.join(FLAGS.model_dir, FLAGS.rawfilename), FLAGS.max_seq_length, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile), sess, batchsize=1000 )
         evaluator = sse_evaluator.Evaluator(model, data.rawEvalCorpus, os.path.join(FLAGS.model_dir, FLAGS.encodedIndexFile) , sess)
         acc1, acc3, acc10 = evaluator.eval()
-        print("epoc#%d, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f \n\n\n" % (epoch, acc1, acc3, acc10) )
+        logging.info("epoc#%d, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f \n\n\n" % (epoch, acc1, acc3, acc10) )
       # Save checkpoint at end of each epoch
       checkpoint_path = os.path.join(FLAGS.model_dir, "SSE-LSTM.ckpt")
       model.save(sess, checkpoint_path + '-epoch-%d'%epoch)
       if len(previous_accuracies) > 0:
-        print('So far best ever model training binary accuracy is: %.4f ' % max(previous_accuracies) )
+        logging.info('So far best ever model training binary accuracy is: %.4f ' % max(previous_accuracies) )
 
 
 def main(_):
 
+  set_up_logging()
+
   if not FLAGS.data_dir or not FLAGS.model_dir:
-    print("--data_dir and --model_dir must be specified.")
+    logging.error("--data_dir and --model_dir must be specified.")
     sys.exit(1)
 
-
-  run_id = 'BatchSize' + str(FLAGS.batch_size)  + '.EmbedSize' + str(FLAGS.embedding_size) + \
-            '.EncodeSize' + str(FLAGS.encoding_size) + '.SrcCell' + str(FLAGS.src_cell_size) + \
-           '.TgtCell' + str(FLAGS.tgt_cell_size) + '.SrcCell' + str(FLAGS.src_cell_size) + \
-           '.' + str(FLAGS.network_mode) + \
-           '.' + str(time.time())[-5:]
-  set_up_logging(run_id)
   train()
 
 if __name__ == "__main__":

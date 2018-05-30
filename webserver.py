@@ -39,6 +39,13 @@ import data_utils
 import sse_model
 import text_encoder
 
+
+import logging
+from logging.handlers import RotatingFileHandler
+from logging import handlers
+import sys
+
+
 from flask import Flask, request, jsonify
 
 class FlaskApp(Flask):
@@ -50,19 +57,33 @@ class FlaskApp(Flask):
     self.model_type = os.environ.get("MODEL_TYPE", "classification")
     self.model_dir = "models-" + self.model_type
     self.indexFile = os.environ.get("INDEX_FILE", "targetEncodingIndex.tsv")
-    print("In app class: Received flask appconfig is: " + os.environ.get('MODEL_TYPE', 'Default_classification') )
+
+    if not os.path.exists("./logs"):
+        os.makedirs("./logs", exist_ok=True)
+    log = logging.getLogger('')
+    log.setLevel(logging.DEBUG)
+    format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setFormatter(format)
+    log.addHandler(ch)
+    fh = handlers.RotatingFileHandler('./logs/WebServerLog.txt', maxBytes=(1048576 * 20), backupCount=7)
+    fh.setFormatter(format)
+    log.addHandler(fh)
+
+
+    logging.info("In app class: Received flask appconfig is: " + os.environ.get('MODEL_TYPE', 'Default_classification') )
 
     if not os.path.exists(self.model_dir):
-      print('Model folder %s does not exist!!' % self.model_dir )
+      logging.error('Model folder %s does not exist!!' % self.model_dir )
       exit(-1)
 
     if not os.path.exists(os.path.join(self.model_dir, self.indexFile)):
-      print('Index File does not exist!!')
+      logging.error('Index File does not exist!!')
       exit(-1)
 
     # load full set targetSeqID data
     if not os.path.exists(os.path.join(self.model_dir, 'vocabulary.txt')):
-        print('Error!! Could not find vocabulary file for encoder in model folder.')
+        logging.error('Error!! Could not find vocabulary file for encoder in model folder.')
         exit(-1)
     self.encoder = text_encoder.SubwordTextEncoder(filename=os.path.join(self.model_dir, 'vocabulary.txt'))
 
@@ -74,7 +95,7 @@ class FlaskApp(Flask):
     for line in codecs.open(os.path.join(self.model_dir, self.indexFile), 'r', 'utf-8').readlines():
         info = line.strip().split('\t')
         if len(info) != 3:
-            print('Error in targetIndexFile! %s' % line)
+            logging.info('Error in targetIndexFile! %s' % line)
             continue
         tgtid, tgtseq, tgtEncoding = info[0], info[1], info[2]
         self.targetIDs.append(tgtid)
@@ -90,10 +111,10 @@ class FlaskApp(Flask):
     self.model = sse_model.SSEModel( self.modelConfigs )
     ckpt = tf.train.get_checkpoint_state(self.model_dir)
     if ckpt:
-      print("loading model from %s" % ckpt.model_checkpoint_path)
+      logging.info("loading model from %s" % ckpt.model_checkpoint_path)
       self.model.saver.restore(self.sess, ckpt.model_checkpoint_path)
     else:
-        print('Error!!!Could not load any model from specified folder: %s' % self.model_dir)
+        logging.error('Error!!!Could not load any model from specified folder: %s' % self.model_dir)
         exit(-1)
 
 
@@ -115,7 +136,7 @@ def classification():
     srclen = len(source_tokens)
     max_seq_length = int(app.modelConfigs['max_seq_length'])
     if srclen > max_seq_length - 2:
-      print('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
+      logging.info('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
       source_tokens = [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
     else:
       source_tokens = [text_encoder.PAD_ID] * (max_seq_length - srclen - 1) + source_tokens + [text_encoder.EOS_ID]
@@ -132,7 +153,7 @@ def classification():
     topResults = []
 
     for idx in range(nbest):
-        print('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
+        logging.info('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
         entry={}
         entry['targetCategoryId'] = top_tgtIDs[idx]
         entry['targetCategoryName'] = top_tgtNames[idx]
@@ -155,7 +176,7 @@ def relevanceRanking():
     srclen = len(source_tokens)
     max_seq_length = int(app.modelConfigs['max_seq_length'])
     if srclen > max_seq_length - 2:
-      print('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
+      logging.info('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
       source_tokens = [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
     else:
       source_tokens = [text_encoder.PAD_ID] * (max_seq_length - srclen - 1) + source_tokens + [text_encoder.EOS_ID]
@@ -171,7 +192,7 @@ def relevanceRanking():
     topResults = []
 
     for idx in range(nbest):
-        print('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
+        logging.info('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
         entry={}
         entry['ListingId'] = top_tgtIDs[idx]
         entry['ListingTitle'] = top_tgtNames[idx]
@@ -196,7 +217,7 @@ def questionAnswering():
     srclen = len(source_tokens)
     max_seq_length = int(app.modelConfigs['max_seq_length'])
     if srclen > max_seq_length - 2:
-      print('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
+      logging.info('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
       source_tokens = [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
     else:
       source_tokens = [text_encoder.PAD_ID] * (max_seq_length - srclen - 1) + source_tokens + [text_encoder.EOS_ID]
@@ -213,7 +234,7 @@ def questionAnswering():
 
 
     for idx in range(nbest):
-        print('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
+        logging.info('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
         entry={}
         entry['answerDocId'] = top_tgtIDs[idx]
         entry['answerContent'] = top_tgtNames[idx]
@@ -238,7 +259,7 @@ def crosslingualSearch():
     srclen = len(source_tokens)
     max_seq_length = int(app.modelConfigs['max_seq_length'])
     if srclen > max_seq_length - 2:
-      print('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
+      logging.info('Input sentence too long, max allowed is %d. Try to increase limit!!!!' % (max_seq_length))
       source_tokens = [text_encoder.PAD_ID] + source_tokens[:max_seq_length - 2] + [text_encoder.EOS_ID]
     else:
       source_tokens = [text_encoder.PAD_ID] * (max_seq_length - srclen - 1) + source_tokens + [text_encoder.EOS_ID]
@@ -256,7 +277,7 @@ def crosslingualSearch():
 
 
     for idx in range(nbest):
-        print('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
+        logging.info('top%d:  %s , %f ,  %s ' % (idx + 1, top_tgtIDs[idx], top_confs[idx], top_tgtNames[idx]))
         entry={}
         entry['documentId'] = top_tgtIDs[idx]
         entry['documentTitle'] = top_tgtNames[idx]
