@@ -163,7 +163,7 @@ def train():
     previous_accuracies = []
     for epoch in range( FLAGS.max_epoc ):
       epoc_start_Time = time.time()
-      for batchId in range( epoc_steps ):
+      for batchId in range( int(epoc_steps) ):
         start_time = time.time()
         source_inputs, tgt_inputs, labels = data.get_train_batch(FLAGS.batch_size)
         model.set_forward_only(False)
