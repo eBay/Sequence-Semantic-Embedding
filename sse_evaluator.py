@@ -105,7 +105,7 @@ class Evaluator(object):
       batchacc = []
       for batchId in range(math.ceil( len(self.srcSeq_batch) / batchSize )):
         feed_dict = self.model.get_source_encoding_feed_dict(self.srcSeq_batch[batchId * batchSize: (batchId +1) * batchSize])
-        sourceEncodings = self.session.run([self.model.src_seq_embedding], feed_dict=feed_dict)
+        sourceEncodings = self.session.run([self.model.norm_src_seq_embedding], feed_dict=feed_dict)
         sourceEncodings = np.vstack(sourceEncodings)
         distances = np.dot( sourceEncodings, self.targetEncodings.T)
         rankedScore, rankedIdx = data_utils.getSortedResults(distances)

@@ -1,5 +1,5 @@
 device=0
-lr=0.1
+lr=0.9
 
 train-classification:
 	python sse_train.py --task_type=classification --data_dir=rawdata-classification --model_dir=models-classification   --device=$(device) --learning_rate=$(lr)  --max_epoc=50 --steps_per_checkpoint=200
@@ -52,7 +52,6 @@ demo-crosslingual:
 
 
 clean:
-	rm *.log
 	rm -rf models*
 	rm *.pyc
 	rm -rf __pycache__

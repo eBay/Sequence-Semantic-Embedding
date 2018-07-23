@@ -283,31 +283,25 @@ class SSEModel(object):
       self.norm_tgt_seq_embedding =  tf.nn.l2_normalize(self.tgt_seq_embedding, dim=-1)
 
       # this similarity tensor is used for prediction, tensor shape is (src_batch_size * target_space_size )
-      #self.similarity = tf.matmul( self.norm_src_seq_embedding, self.norm_tgt_seq_embedding, transpose_b=True)
-      self.similarity = tf.matmul( self.src_seq_embedding, self.tgt_seq_embedding, transpose_b=True)
+      self.similarity = tf.matmul( self.norm_src_seq_embedding, self.norm_tgt_seq_embedding, transpose_b=True)
       #self.similarity = tf.Print(self.similarity, [self.similarity], summarize=571, message='similarity')
 
-      # self.norm_similarity = tf.matmul( tf.nn.l2_normalize(self.src_seq_embedding, dim=-1), tf.nn.l2_normalize( self.tgt_seq_embedding, dim=-1), transpose_b=True)
       # this binary logit tensor is used for training, tensor shape is (src_batch_size * 1)
-
-      #self.binarylogit =  tf.reduce_sum( tf.multiply(self.norm_src_seq_embedding, self.norm_tgt_seq_embedding) , axis=-1 )
-      self.binarylogit =  tf.reduce_sum( tf.multiply(self.src_seq_embedding, self.tgt_seq_embedding) , axis=-1 )
+      self.binarylogit =  tf.reduce_sum( tf.multiply(self.norm_src_seq_embedding, self.norm_tgt_seq_embedding) , axis=-1 )
       #self.binarylogit = tf.Print(self.binarylogit, [self.binarylogit], summarize=6, message='binarylogit')
 
 
     with tf.variable_scope('training_loss'):
       #TODO: try logistic Binary cross entropy loss function later: tf.nn.sigmoid_cross_entropy_with_logits(logits, targets, name=None)
-      # basic bianry logistic loss, treat pos and neg the same weight
-      #self.loss = tf.reduce_mean( tf.nn.sigmoid_cross_entropy_with_logits( logits=self.binarylogit, labels= self._labels) )
+
       # weighted loss, to treat pos/neg loss with different weight
-      self.loss = tf.reduce_mean( tf.nn.weighted_cross_entropy_with_logits( logits=  self.binarylogit, targets= self._labels, pos_weight= 1.0 ))
+      self.loss = tf.reduce_mean( tf.nn.weighted_cross_entropy_with_logits( logits= tf.multiply(64.0, self.binarylogit) , targets= self._labels, pos_weight= 1.0 ) )
       # self.loss = tf.Print(self.loss, [self.loss], summarize=6, message='loss')
-      #self.loss = tf.reduce_mean(tf.multiply(self._labels, 1.0 - tf.sigmoid(self.binarylogit)))   +  tf.reduce_mean(tf.multiply(1 - self._labels, tf.sigmoid(self.binarylogit) ))
 
       #compute the binary training accuracy
-      self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.sigmoid(self.binarylogit) + 0.1) ))   +  tf.reduce_mean(tf.multiply(1.0 - self._labels, tf.floor(1.1 - tf.sigmoid(self.binarylogit))) )
+      self.train_acc = tf.reduce_mean(tf.multiply(self._labels, tf.floor(tf.sigmoid( 64.0 * self.binarylogit) + 0.1) ))   +  tf.reduce_mean(tf.multiply(1.0 - self._labels, tf.floor(1.1 - tf.sigmoid( 64.0 * self.binarylogit))) )
 
-    ########## Testing with Siamese loss with margin ############
+      ########## Testing with Siamese loss with margin ############
     # with tf.variable_scope('training_loss'):
     #   # siamese loss with margin
     #   margin = 0.25

@@ -88,7 +88,7 @@ def createIndexFile( model, encoder, rawfile, max_seq_len, encodeIndexFile, sess
       tgtIds.append(tgtId)
       tgtSentences.append(tgtSentence)
     dict = model.get_target_encoding_feed_dict(tgtInputs)
-    targetsEncodings = session.run([model.tgt_seq_embedding], feed_dict=dict)
+    targetsEncodings = session.run([model.norm_tgt_seq_embedding], feed_dict=dict)
     targetsEncodings = np.vstack(targetsEncodings)
     for idx in range(len(tgtSentences)):
       outFile.write(
