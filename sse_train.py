@@ -195,8 +195,8 @@ def train():
           # print("epoc# %.3f, task specific evaluation: top 1/3/10 accuracies: %f / %f / %f " % (float(model.global_step.eval())/ float(epoc_steps), acc1, acc3, acc10))
           # ###end of debugging########
 
-          # Decrease learning rate if no improvement was seen over last 3 times.
-          if len(previous_accuracies) > 3 and train_acc < min(previous_accuracies[-2:]):
+          # Decrease learning rate if no improvement was seen over last 5 times.
+          if len(previous_accuracies) > 6 and train_acc < min(previous_accuracies[-5:]):
             sess.run(model.learning_rate_decay_op)
           previous_accuracies.append(train_acc)
           # save currently best-ever model
